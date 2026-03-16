@@ -1,0 +1,245 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// Organization
+// ============================================================
+
+model Organization {
+  id       String        @id @default(cuid())
+  name     String
+  slug     String        @unique
+  members  OrgMember[]
+  channels Channel[]
+  settings OrgSettings?
+
+  createdAt DateTime @default(now())
+}
+
+model OrgSettings {
+  id                String       @id @default(cuid())
+  orgId             String       @unique
+  org               Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  messageRetainDays Int?         // null = keep forever
+}
+
+model OrgMember {
+  id     String       @id @default(cuid())
+  userId String
+  orgId  String
+  role   String       @default("member") // admin | member | guest
+  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  org    Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, orgId])
+  @@index([orgId])
+}
+
+// ============================================================
+// User
+// ============================================================
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  avatar    String?
+  sub       String?  // OIDC subject identifier
+  provider  String?  // keycloak | google | github | azure | oidc
+  isBot     Boolean  @default(false)
+  status    String   @default("offline")
+  createdAt DateTime @default(now())
+
+  orgMemberships     OrgMember[]
+  channelMemberships ChannelMember[]
+  sentMessages       Message[]           @relation("sender")
+  reactions          Reaction[]
+  readCursors        ChannelReadCursor[]
+  pushSubscriptions  PushSubscription[]
+  aiAssistant        AIAssistant?
+}
+
+// ============================================================
+// Channel
+// ============================================================
+
+model Channel {
+  id        String          @id @default(cuid())
+  name      String
+  type      String          @default("group") // group | dm | readonly
+  isPrivate Boolean         @default(false)
+  orgId     String
+  org       Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  members   ChannelMember[]
+  messages  Message[]
+  createdAt DateTime        @default(now())
+
+  @@index([orgId])
+}
+
+model ChannelMember {
+  id        String  @id @default(cuid())
+  userId    String
+  channelId String
+  role      String  @default("member") // admin | member
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, channelId])
+  @@index([channelId])
+}
+
+// ============================================================
+// Message
+// ============================================================
+
+model Message {
+  id          String       @id @default(cuid())
+  content     String
+  type        String       @default("text") // text | image | file | system
+  channelId   String
+  senderId    String
+  replyToId   String?
+  isRetracted Boolean      @default(false)
+  editedAt    DateTime?
+  channel     Channel      @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  sender      User         @relation("sender", fields: [senderId], references: [id])
+  replyTo     Message?     @relation("thread", fields: [replyToId], references: [id])
+  replies     Message[]    @relation("thread")
+  reactions   Reaction[]
+  attachments Attachment[]
+  createdAt   DateTime     @default(now())
+
+  @@index([channelId, createdAt])
+}
+
+// ============================================================
+// Read Cursor (watermark approach)
+// ============================================================
+
+model ChannelReadCursor {
+  id            String   @id @default(cuid())
+  userId        String
+  channelId     String
+  lastReadMsgId String
+  lastReadAt    DateTime @default(now())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, channelId])
+  @@index([channelId, lastReadMsgId])
+}
+
+// ============================================================
+// Reaction / Attachment
+// ============================================================
+
+model Reaction {
+  id        String  @id @default(cuid())
+  emoji     String
+  messageId String
+  userId    String
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+}
+
+model Attachment {
+  id        String  @id @default(cuid())
+  name      String
+  url       String
+  mimeType  String
+  size      Int
+  messageId String
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+}
+
+// ============================================================
+// Audit Log
+// ============================================================
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  orgId     String
+  action    String
+  actorId   String
+  targetId  String?
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  @@index([orgId, createdAt])
+  @@index([actorId])
+}
+
+// ============================================================
+// AI Assistant
+// ============================================================
+
+model AIAssistant {
+  id           String               @id @default(cuid())
+  orgId        String
+  name         String
+  avatar       String?
+  systemPrompt String
+  baseUrl      String
+  apiKeyEnc    String               // AES-256-GCM encrypted
+  model        String
+  maxContext   Int                   @default(20)
+  isActive     Boolean              @default(true)
+  botUserId    String               @unique
+  botUser      User                 @relation(fields: [botUserId], references: [id])
+  channels     AIAssistantChannel[]
+  createdAt    DateTime             @default(now())
+
+  @@index([orgId])
+}
+
+model AIAssistantChannel {
+  id          String      @id @default(cuid())
+  assistantId String
+  channelId   String
+  assistant   AIAssistant @relation(fields: [assistantId], references: [id], onDelete: Cascade)
+
+  @@unique([assistantId, channelId])
+}
+
+// ============================================================
+// Integration API (Phase 7)
+// ============================================================
+
+model Integration {
+  id          String   @id @default(cuid())
+  orgId       String
+  name        String
+  description String?
+  apiKeyHash  String   @unique  // SHA-256 hash
+  webhookUrl  String?
+  permissions Json     @default("[]")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@index([orgId])
+}
+
+// ============================================================
+// Push Subscription
+// ============================================================
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  keys      Json     // { p256dh, auth }
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}

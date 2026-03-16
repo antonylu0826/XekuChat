@@ -1,0 +1,20 @@
+{
+  "name": "xekuchat",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "bun run --filter '*' dev",
+    "dev:server": "bun run --filter @xekuchat/server dev",
+    "dev:client": "bun run --filter @xekuchat/client dev",
+    "build": "bun run --filter '*' build",
+    "db:generate": "bun run --filter @xekuchat/server db:generate",
+    "db:push": "bun run --filter @xekuchat/server db:push",
+    "db:migrate": "bun run --filter @xekuchat/server db:migrate",
+    "test:e2e": "bun run --filter @xekuchat/e2e test",
+    "test:e2e:ui": "bun run --filter @xekuchat/e2e test:ui",
+    "lint": "bun run --filter '*' lint",
+    "typecheck": "bun run --filter '*' typecheck"
+  }
+}

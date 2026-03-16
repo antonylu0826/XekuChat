@@ -1,0 +1,32 @@
+{
+  "name": "@xekuchat/client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@xekuchat/core": "workspace:*",
+    "react": "^19",
+    "react-dom": "^19",
+    "react-router-dom": "^7",
+    "i18next": "^24",
+    "react-i18next": "^15",
+    "i18next-browser-languagedetector": "^8"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.2.1",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^4",
+    "autoprefixer": "^10",
+    "postcss": "^8",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vite": "^6"
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "app": {
+    "name": "XekuChat",
+    "tagline": "企業聊天系統"
+  },
+  "auth": {
+    "login": "登入",
+    "loginWith": "使用 {{provider}} 登入",
+    "logout": "登出",
+    "loggingIn": "登入中...",
+    "devLogin": "開發快速登入",
+    "devName": "顯示名稱",
+    "devEmail": "Email"
+  },
+  "nav": {
+    "channels": "頻道",
+    "directMessages": "私人訊息",
+    "settings": "設定"
+  },
+  "channel": {
+    "create": "建立頻道",
+    "name": "頻道名稱",
+    "type": "頻道類型",
+    "public": "公開",
+    "private": "私有",
+    "readonly": "唯讀"
+  },
+  "message": {
+    "placeholder": "輸入訊息...",
+    "send": "送出",
+    "retracted": "此訊息已收回",
+    "readBy": "已讀 {{count}} 人",
+    "search": "搜尋訊息",
+    "noMessages": "尚無訊息"
+  },
+  "org": {
+    "create": "建立組織",
+    "name": "組織名稱",
+    "members": "成員",
+    "settings": "組織設定",
+    "invite": "邀請成員"
+  },
+  "common": {
+    "loading": "載入中...",
+    "error": "發生錯誤",
+    "save": "儲存",
+    "cancel": "取消",
+    "delete": "刪除",
+    "confirm": "確認"
+  }
+}

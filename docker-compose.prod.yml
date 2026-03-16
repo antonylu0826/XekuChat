@@ -1,0 +1,72 @@
+# XekuChat — Production Environment (Multi-node)
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+services:
+  # ---- Caddy (Reverse Proxy + HTTPS + Load Balancer) ----
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"  # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app1
+      - app2
+
+  # ---- App Node 1 ----
+  app1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      APP_PORT: "3000"
+      APP_NODE_ID: "node-1"
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ---- App Node 2 ----
+  app2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      APP_PORT: "3000"
+      APP_NODE_ID: "node-2"
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Override postgres for production
+  postgres:
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+  redis:
+    restart: always
+
+  minio:
+    restart: always
+
+  keycloak:
+    command: start
+    environment:
+      KC_HOSTNAME: ${KC_HOSTNAME:-auth.example.com}
+
+volumes:
+  caddy_data:
+  caddy_config:

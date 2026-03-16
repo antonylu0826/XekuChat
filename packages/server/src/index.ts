@@ -1,0 +1,113 @@
+import { Hono } from "hono";
+import { cors } from "hono/cors";
+import { logger } from "hono/logger";
+import { secureHeaders } from "hono/secure-headers";
+import { authRoutes } from "./routes/auth";
+import { orgRoutes } from "./routes/org";
+import { channelRoutes } from "./routes/channel";
+import { messageRoutes } from "./routes/message";
+import { healthRoutes } from "./routes/health";
+import { uploadRoutes } from "./routes/upload";
+import { tusRoutes } from "./routes/tus";
+import { searchRoutes } from "./routes/search";
+import { reactionRoutes } from "./routes/reaction";
+import { previewRoutes } from "./routes/preview";
+import { redis, redisSub } from "./lib/redis";
+import { prisma } from "./lib/prisma";
+import { verifyAccessToken } from "./auth/jwt";
+import { handleWSOpen, handleWSClose, handleWSMessage } from "./ws/handler";
+import { startHeartbeat, stopHeartbeat, type WSData } from "./ws/connections";
+import { initPubSub } from "./ws/pubsub";
+import { startPresenceBatching, stopPresenceBatching } from "./ws/presence";
+import { ensureBucket } from "./lib/minio";
+
+const app = new Hono();
+
+// ---- Middleware ----
+app.use("*", logger());
+app.use("*", secureHeaders());
+app.use(
+  "*",
+  cors({
+    origin: process.env.APP_URL || "http://localhost:5173",
+    credentials: true,
+  })
+);
+
+// ---- Routes ----
+app.route("/health", healthRoutes);
+app.route("/auth", authRoutes);
+app.route("/api/orgs", orgRoutes);
+app.route("/api/channels", channelRoutes);
+app.route("/api/messages", messageRoutes);
+app.route("/api/upload", uploadRoutes);
+app.route("/api/tus", tusRoutes);
+app.route("/api/search", searchRoutes);
+app.route("/api/reactions", reactionRoutes);
+app.route("/api/preview", previewRoutes);
+
+// ---- Initialize services ----
+initPubSub();
+startHeartbeat();
+startPresenceBatching();
+ensureBucket().catch((err) => console.warn("MinIO bucket init:", err.message));
+
+// ---- Graceful shutdown ----
+async function shutdown() {
+  console.log("Shutting down...");
+  stopHeartbeat();
+  stopPresenceBatching();
+  redisSub.disconnect();
+  redis.disconnect();
+  await prisma.$disconnect();
+  process.exit(0);
+}
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
+
+// ---- Start ----
+const port = parseInt(process.env.APP_PORT || "3000");
+console.log(`XekuChat server starting on port ${port}`);
+
+export default {
+  port,
+  fetch: app.fetch,
+  websocket: {
+    async open(ws: import("bun").ServerWebSocket<WSData>) {
+      await handleWSOpen(ws);
+    },
+    async message(ws: import("bun").ServerWebSocket<WSData>, message: string | Buffer) {
+      await handleWSMessage(ws, message);
+    },
+    async close(ws: import("bun").ServerWebSocket<WSData>) {
+      await handleWSClose(ws);
+    },
+  },
+};
+
+// ---- WebSocket Upgrade Route ----
+app.get("/ws", async (c) => {
+  const token = c.req.query("token");
+  if (!token) {
+    return c.json({ error: "Missing token" }, 401);
+  }
+
+  try {
+    const payload = await verifyAccessToken(token);
+
+    const success = c.env?.upgrade?.(c.req.raw, {
+      data: {
+        userId: payload.sub,
+        channels: new Set<string>(),
+        lastPing: Date.now(),
+      } satisfies WSData,
+    });
+
+    if (success) {
+      return undefined as never;
+    }
+    return c.json({ error: "WebSocket upgrade failed" }, 500);
+  } catch {
+    return c.json({ error: "Invalid token" }, 401);
+  }
+});

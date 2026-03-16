@@ -1,0 +1,51 @@
+{
+  "app": {
+    "name": "XekuChat",
+    "tagline": "Enterprise Chat"
+  },
+  "auth": {
+    "login": "Sign in",
+    "loginWith": "Sign in with {{provider}}",
+    "logout": "Sign out",
+    "loggingIn": "Signing in...",
+    "devLogin": "Dev Quick Login",
+    "devName": "Display Name",
+    "devEmail": "Email"
+  },
+  "nav": {
+    "channels": "Channels",
+    "directMessages": "Direct Messages",
+    "settings": "Settings"
+  },
+  "channel": {
+    "create": "Create Channel",
+    "name": "Channel Name",
+    "type": "Channel Type",
+    "public": "Public",
+    "private": "Private",
+    "readonly": "Read-only"
+  },
+  "message": {
+    "placeholder": "Type a message...",
+    "send": "Send",
+    "retracted": "This message has been retracted",
+    "readBy": "Read by {{count}}",
+    "search": "Search messages",
+    "noMessages": "No messages yet"
+  },
+  "org": {
+    "create": "Create Organization",
+    "name": "Organization Name",
+    "members": "Members",
+    "settings": "Organization Settings",
+    "invite": "Invite Member"
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "confirm": "Confirm"
+  }
+}
