@@ -82,6 +82,9 @@ export function unsubscribeUser(userId: string) {
 export function initPubSub() {
   redisSub.subscribe(PRESENCE_CHANNEL);
 
+  // Remove any existing listeners to prevent duplicates on hot reload
+  redisSub.removeAllListeners("message");
+
   redisSub.on("message", (_channel: string, rawMessage: string) => {
     try {
       const msg: PubSubMessage = JSON.parse(rawMessage);

@@ -9,6 +9,7 @@ import { ImageLightbox } from "./ImageLightbox";
 interface MessageListProps {
   messages: MessagePayload[];
   currentUserId: string;
+  isAdmin?: boolean;
   token: string;
   readCounts: Map<string, number>;
   reactions: Map<string, Array<{ emoji: string; count: number }>>;
@@ -27,6 +28,7 @@ function extractUrls(text: string): string[] {
 export function MessageList({
   messages,
   currentUserId,
+  isAdmin = false,
   token,
   readCounts,
   reactions,
@@ -73,15 +75,39 @@ export function MessageList({
   return (
     <div ref={containerRef} onScroll={handleScroll} className="relative flex flex-1 flex-col overflow-y-auto p-4">
       <div className="flex-1" />
-      {messages.map((msg) => {
+      {messages.map((msg, idx) => {
         const isMine = msg.senderId === currentUserId;
         const readCount = readCounts.get(msg.id);
         const msgReactions = reactions.get(msg.id) || [];
         const urls = msg.isRetracted ? [] : extractUrls(msg.content);
+        const prevMsg = messages[idx - 1];
+        const showSender = !isMine && msg.senderId !== prevMsg?.senderId;
+        const senderName = msg.sender?.name ?? msg.senderId;
+        const senderAvatar = msg.sender?.avatar;
 
         return (
-          <div key={msg.id} className={`group mb-3 flex ${isMine ? "justify-end" : "justify-start"}`}>
+          <div key={msg.id} className={`group mb-1 flex gap-2 ${isMine ? "justify-end" : "justify-start"}`}>
+            {/* Avatar — other users only */}
+            {!isMine && (
+              <div className="mt-1 w-8 shrink-0 self-start">
+                {showSender && (
+                  senderAvatar ? (
+                    <img src={senderAvatar} alt="" className="h-8 w-8 rounded-full object-cover" />
+                  ) : (
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-600 text-xs font-medium">
+                      {senderName.charAt(0).toUpperCase()}
+                    </div>
+                  )
+                )}
+              </div>
+            )}
+
             <div className={`max-w-lg ${isMine ? "order-2" : ""}`}>
+              {/* Sender name */}
+              {showSender && (
+                <p className="mb-1 text-xs font-medium text-slate-400">{senderName}</p>
+              )}
+
               {/* Reply reference */}
               {msg.replyToId && (
                 <div className="mb-1 rounded border-l-2 border-slate-500 pl-2 text-xs text-slate-400">
@@ -214,7 +240,7 @@ export function MessageList({
                       </button>
                     </>
                   )}
-                  {isMine && !msg.isRetracted && (
+                  {(isMine || isAdmin) && !msg.isRetracted && (
                     <button
                       onClick={() => onRetract(msg.id)}
                       className="rounded p-1 text-slate-500 transition hover:bg-slate-700 hover:text-red-400"

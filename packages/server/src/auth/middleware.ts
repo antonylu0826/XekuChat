@@ -19,6 +19,8 @@ export async function authMiddleware(c: Context, next: Next) {
 
   try {
     const payload = await verifyAccessToken(authHeader.slice(7));
+    const user = await prisma.user.findUnique({ where: { id: payload.sub }, select: { isDisabled: true } });
+    if (user?.isDisabled) return c.json({ error: "Account disabled" }, 403);
     c.set("userId", payload.sub);
     await next();
   } catch {

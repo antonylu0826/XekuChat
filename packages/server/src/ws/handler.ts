@@ -8,12 +8,14 @@ import {
   sendToChannel,
   sendToUser,
   subscribeToChannel,
+  isUserOnlineLocally,
   type WSData,
 } from "./connections";
 import { publishToChannel } from "./pubsub";
 import { subscribeChannel, subscribeUser, unsubscribeUser } from "./pubsub";
 import { checkRateLimit } from "./ratelimit";
 import { setUserOnline, setUserOffline } from "./presence";
+import { sendPushNotification } from "../lib/webpush";
 
 // ============================================================
 // WebSocket Message Handler
@@ -77,6 +79,9 @@ export async function handleWSMessage(ws: ServerWebSocket<WSData>, raw: string |
     case "read:update":
       await handleReadUpdate(ws, event);
       break;
+    case "channel:join":
+      await handleChannelJoin(ws, event);
+      break;
     default:
       ws.send(JSON.stringify({ type: "error", code: "UNKNOWN_EVENT", message: "Unknown event type" }));
   }
@@ -102,6 +107,16 @@ async function handleSendMessage(
   if (!ws.data.channels.has(event.channelId)) {
     ws.send(JSON.stringify({ type: "error", code: "NOT_MEMBER", message: "Not a member of this channel" }));
     return;
+  }
+
+  // Block non-super-admins from sending to readonly channels
+  const channel = await prisma.channel.findUnique({ where: { id: event.channelId }, select: { type: true, name: true } });
+  if (channel?.type === "readonly") {
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { isSuperAdmin: true } });
+    if (!user?.isSuperAdmin) {
+      ws.send(JSON.stringify({ type: "error", code: "READONLY_CHANNEL", message: "This channel is read-only" }));
+      return;
+    }
   }
 
   // Create message in DB
@@ -137,6 +152,7 @@ async function handleSendMessage(
       type: message.type as WSServerEvent extends { type: "message:new" } ? never : string,
       channelId: message.channelId,
       senderId: message.senderId,
+      sender: message.sender,
       replyToId: message.replyToId,
       isRetracted: false,
       attachments: message.attachments.map((a) => ({
@@ -155,6 +171,42 @@ async function handleSendMessage(
   // Send to local connections + publish for other nodes
   sendToChannel(event.channelId, payloadStr);
   await publishToChannel(event.channelId, payloadStr, userId);
+
+  // Web Push: notify offline channel members who have not muted the channel
+  const members = await prisma.channelMember.findMany({
+    where: { channelId: event.channelId, userId: { not: userId }, isMuted: false },
+    select: { userId: true },
+  });
+
+  const offlineUserIds = members
+    .map((m) => m.userId)
+    .filter((id) => !isUserOnlineLocally(id));
+
+  if (offlineUserIds.length > 0) {
+    const senderName = message.sender.name;
+    const pushTitle = channel?.type === "dm" ? senderName : (channel?.name ?? "XekuChat");
+    const pushBody = message.type === "text"
+      ? (message.content.length > 100 ? message.content.slice(0, 97) + "..." : message.content)
+      : message.type === "image" ? "📷 圖片" : "📎 檔案";
+
+    const subs = await prisma.pushSubscription.findMany({
+      where: { userId: { in: offlineUserIds } },
+    });
+
+    for (const sub of subs) {
+      const keys = sub.keys as { p256dh: string; auth: string };
+      sendPushNotification(sub.endpoint, keys, {
+        title: pushTitle,
+        body: pushBody,
+        data: { channelId: event.channelId },
+      }).catch(async (err: { statusCode?: number }) => {
+        // Remove expired subscriptions
+        if (err?.statusCode === 410 || err?.statusCode === 404) {
+          await prisma.pushSubscription.delete({ where: { id: sub.id } }).catch(() => {});
+        }
+      });
+    }
+  }
 }
 
 async function handleRetractMessage(
@@ -167,9 +219,31 @@ async function handleRetractMessage(
     where: { id: event.messageId },
   });
 
-  if (!message || message.senderId !== userId) {
+  if (!message) {
     ws.send(JSON.stringify({ type: "error", code: "FORBIDDEN", message: "Cannot retract this message" }));
     return;
+  }
+
+  // Allow: message sender, channel admin, org admin, or super admin
+  const isSender = message.senderId === userId;
+  if (!isSender) {
+    const [channelMember, orgMember, actor] = await Promise.all([
+      prisma.channelMember.findUnique({ where: { userId_channelId: { userId, channelId: message.channelId } }, select: { role: true } }),
+      prisma.channel.findUnique({ where: { id: message.channelId }, select: { orgId: true } }).then((ch) =>
+        ch ? prisma.orgMember.findUnique({ where: { userId_orgId: { userId, orgId: ch.orgId } }, select: { role: true } }) : null
+      ),
+      prisma.user.findUnique({ where: { id: userId }, select: { isSuperAdmin: true } }),
+    ]);
+
+    const canModerate =
+      actor?.isSuperAdmin ||
+      channelMember?.role === "admin" ||
+      orgMember?.role === "admin";
+
+    if (!canModerate) {
+      ws.send(JSON.stringify({ type: "error", code: "FORBIDDEN", message: "Cannot retract this message" }));
+      return;
+    }
   }
 
   await prisma.message.update({
@@ -253,4 +327,24 @@ async function handleReadUpdate(
   const payloadStr = JSON.stringify(payload);
   sendToChannel(event.channelId, payloadStr);
   await publishToChannel(event.channelId, payloadStr);
+}
+
+async function handleChannelJoin(
+  ws: ServerWebSocket<WSData>,
+  event: Extract<WSClientEvent, { type: "channel:join" }>
+) {
+  const userId = ws.data.userId;
+
+  // Verify actual DB membership before subscribing
+  const member = await prisma.channelMember.findUnique({
+    where: { userId_channelId: { userId, channelId: event.channelId } },
+  });
+
+  if (!member) {
+    ws.send(JSON.stringify({ type: "error", code: "NOT_MEMBER", message: "Not a member of this channel" }));
+    return;
+  }
+
+  subscribeToChannel(ws, event.channelId);
+  subscribeChannel(event.channelId);
 }

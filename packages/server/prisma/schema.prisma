@@ -52,8 +52,10 @@ model User {
   avatar    String?
   sub       String?  // OIDC subject identifier
   provider  String?  // keycloak | google | github | azure | oidc
-  isBot     Boolean  @default(false)
-  status    String   @default("offline")
+  isBot        Boolean  @default(false)
+  isDisabled   Boolean  @default(false)
+  isSuperAdmin Boolean  @default(false)
+  status       String   @default("offline")
   createdAt DateTime @default(now())
 
   orgMemberships     OrgMember[]
@@ -88,6 +90,7 @@ model ChannelMember {
   userId    String
   channelId String
   role      String  @default("member") // admin | member
+  isMuted   Boolean @default(false)
   user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
 

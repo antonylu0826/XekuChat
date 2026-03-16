@@ -9,6 +9,8 @@ export interface UserProfile {
   name: string;
   avatar: string | null;
   isBot: boolean;
+  isDisabled: boolean;
+  isSuperAdmin: boolean;
   status: UserStatus;
 }
 
@@ -43,6 +45,7 @@ export interface MessagePayload {
   type: MessageType;
   channelId: string;
   senderId: string;
+  sender?: { id: string; name: string; avatar: string | null };
   replyToId: string | null;
   isRetracted: boolean;
   attachments: AttachmentInfo[];
@@ -63,7 +66,8 @@ export type WSClientEvent =
   | { type: "message:retract"; messageId: string }
   | { type: "typing:start"; channelId: string }
   | { type: "typing:stop"; channelId: string }
-  | { type: "read:update"; channelId: string; messageId: string };
+  | { type: "read:update"; channelId: string; messageId: string }
+  | { type: "channel:join"; channelId: string };
 
 export type WSServerEvent =
   | { type: "message:new"; message: MessagePayload }
@@ -72,6 +76,7 @@ export type WSServerEvent =
   | { type: "read:updated"; channelId: string; messageId: string; readCount: number }
   | { type: "reaction:updated"; messageId: string; channelId: string; reactions: Array<{ emoji: string; count: number }> }
   | { type: "presence"; userId: string; status: UserStatus }
+  | { type: "channel:joined"; channelId: string }
   | { type: "error"; code: string; message: string };
 
 // ---- Audit ----
@@ -80,9 +85,14 @@ export type AuditAction =
   | "message_delete"
   | "member_kick"
   | "member_invite"
+  | "member_role_change"
+  | "member_disable"
   | "channel_create"
+  | "channel_update"
   | "channel_delete"
   | "org_settings_update"
+  | "integration_create"
+  | "integration_delete"
   | "ai_assistant_create"
   | "ai_assistant_update";
 

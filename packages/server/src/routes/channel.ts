@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { prisma } from "../lib/prisma";
 import { authMiddleware } from "../auth/middleware";
 import { writeAuditLog } from "../audit/log";
+import { sendToUser } from "../ws/connections";
 
 export const channelRoutes = new Hono();
 
@@ -93,6 +94,11 @@ channelRoutes.post("/dm", async (c) => {
     include: { members: true },
   });
 
+  // Notify both users via WS so their channel lists refresh
+  const joinedPayload = JSON.stringify({ type: "channel:joined", channelId: channel.id });
+  sendToUser(userId, joinedPayload);
+  sendToUser(targetUserId, joinedPayload);
+
   return c.json({ success: true, data: channel }, 201);
 });
 
@@ -111,11 +117,45 @@ channelRoutes.get("/org/:orgId", async (c) => {
     },
     include: {
       _count: { select: { members: true, messages: true } },
+      members: {
+        include: { user: { select: { id: true, name: true, avatar: true } } },
+        // isMuted is a field on ChannelMember, automatically included
+      },
     },
     orderBy: { createdAt: "desc" },
   });
 
-  return c.json({ success: true, data: channels });
+  // Compute unread counts per channel
+  const channelIds = channels.map((c) => c.id);
+  const cursors = await prisma.channelReadCursor.findMany({
+    where: { userId, channelId: { in: channelIds } },
+    select: { channelId: true, lastReadAt: true },
+  });
+  const cursorMap = new Map(cursors.map((c) => [c.channelId, c.lastReadAt]));
+
+  const unreadEntries = await Promise.all(
+    channels.map(async (ch) => {
+      const lastReadAt = cursorMap.get(ch.id);
+      // No cursor = user hasn't opened this channel yet; treat as baseline (0)
+      // so historical messages don't pollute the unread count
+      if (!lastReadAt) return [ch.id, 0] as [string, number];
+      const count = await prisma.message.count({
+        where: {
+          channelId: ch.id,
+          senderId: { not: userId },
+          isRetracted: false,
+          createdAt: { gt: lastReadAt },
+        },
+      });
+      return [ch.id, count] as [string, number];
+    })
+  );
+  const unreadMap = Object.fromEntries(unreadEntries);
+
+  return c.json({
+    success: true,
+    data: channels.map((ch) => ({ ...ch, unreadCount: unreadMap[ch.id] ?? 0 })),
+  });
 });
 
 // Get channel details
@@ -189,14 +229,27 @@ channelRoutes.post("/:channelId/members", async (c) => {
   return c.json({ success: true, data: member }, 201);
 });
 
-// Leave channel
+// Leave channel (DM: delete channel when all members have left)
 channelRoutes.delete("/:channelId/leave", async (c) => {
   const userId = c.get("userId");
   const channelId = c.req.param("channelId");
 
+  const channel = await prisma.channel.findUnique({
+    where: { id: channelId },
+    select: { type: true },
+  });
+
   await prisma.channelMember.delete({
     where: { userId_channelId: { userId, channelId } },
   });
+
+  // For DM channels, delete the channel if no members remain
+  if (channel?.type === "dm") {
+    const remaining = await prisma.channelMember.count({ where: { channelId } });
+    if (remaining === 0) {
+      await prisma.channel.delete({ where: { id: channelId } });
+    }
+  }
 
   return c.json({ success: true });
 });

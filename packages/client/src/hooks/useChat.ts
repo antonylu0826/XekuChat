@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import type { MessagePayload, WSServerEvent } from "@xekuchat/core";
+import type { MessagePayload, WSServerEvent, WSClientEvent } from "@xekuchat/core";
 import { useWebSocket } from "./useWebSocket";
 
 interface ChatState {
@@ -20,16 +20,30 @@ export function useChat(token: string | null, activeChannelId: string | null) {
   const activeChannelRef = useRef(activeChannelId);
   activeChannelRef.current = activeChannelId;
 
+  // sendRef breaks the circular dep between handleMessage and send
+  const sendRef = useRef<(event: WSClientEvent) => void>(() => {});
+  // Deduplicate message:new events (can arrive twice: direct + Redis subscriber)
+  const seenMsgIds = useRef<Set<string>>(new Set());
+
   const handleMessage = useCallback((event: WSServerEvent) => {
     switch (event.type) {
-      case "message:new":
+      case "message:new": {
+        const msgId = event.message.id;
+        if (seenMsgIds.current.has(msgId)) break; // duplicate, skip
+        seenMsgIds.current.add(msgId);
+        setTimeout(() => seenMsgIds.current.delete(msgId), 60_000); // cleanup after 1 min
+
+        // Notify sidebar for unread badge
+        window.dispatchEvent(
+          new CustomEvent("xeku:message-new", {
+            detail: { channelId: event.message.channelId, senderId: event.message.senderId },
+          })
+        );
         if (event.message.channelId === activeChannelRef.current) {
-          setState((s) => {
-            if (s.messages.some((m) => m.id === event.message.id)) return s;
-            return { ...s, messages: [...s.messages, event.message] };
-          });
+          setState((s) => ({ ...s, messages: [...s.messages, event.message] }));
         }
         break;
+      }
 
       case "message:retracted":
         setState((s) => ({
@@ -69,10 +83,25 @@ export function useChat(token: string | null, activeChannelId: string | null) {
           });
         }
         break;
+
+      case "channel:joined":
+        // Subscribe WS to the new channel, then tell UI to reload channel list
+        sendRef.current({ type: "channel:join", channelId: event.channelId });
+        window.dispatchEvent(new CustomEvent("xeku:channel-joined", { detail: { channelId: event.channelId } }));
+        break;
     }
   }, []);
 
   const { status, send } = useWebSocket({ token, onMessage: handleMessage });
+
+  // Keep sendRef up-to-date so handleMessage can call send without being in its deps
+  sendRef.current = send;
+
+  // Subscribe to channel via WS when channel changes (handles dynamically added channels)
+  useEffect(() => {
+    if (!activeChannelId) return;
+    send({ type: "channel:join", channelId: activeChannelId });
+  }, [activeChannelId, send]);
 
   // Fetch initial messages when channel changes
   useEffect(() => {
@@ -86,9 +115,21 @@ export function useChat(token: string | null, activeChannelId: string | null) {
       .then((res) => res.json())
       .then((data) => {
         if (data.items) {
+          // Build initial reactions map from message data
+          const reactionsMap = new Map<string, Array<{ emoji: string; count: number }>>();
+          for (const msg of data.items) {
+            if (msg.reactions?.length) {
+              const grouped = new Map<string, number>();
+              for (const r of msg.reactions) {
+                grouped.set(r.emoji, (grouped.get(r.emoji) ?? 0) + 1);
+              }
+              reactionsMap.set(msg.id, Array.from(grouped.entries()).map(([emoji, count]) => ({ emoji, count })));
+            }
+          }
           setState((s) => ({
             ...s,
             messages: data.items as MessagePayload[],
+            reactions: reactionsMap,
           }));
         }
       })
@@ -152,13 +193,13 @@ export function useChat(token: string | null, activeChannelId: string | null) {
   const sendReaction = useCallback(
     async (messageId: string, emoji: string) => {
       if (!token) return;
-      await fetch("/api/reactions", {
+      await fetch(`/api/reactions/${messageId}`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ messageId, emoji }),
+        body: JSON.stringify({ emoji }),
       });
     },
     [token]

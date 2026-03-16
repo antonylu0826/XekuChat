@@ -97,20 +97,22 @@
 - [x] pgroonga 全文搜尋（支援中文斷詞）
 - [x] Phase 3 e2e 測試（上傳、搜尋、反應、回覆、URL 預覽）
 
-### Phase 4 — 進階組織與權限管理 + Admin 後台
-- [ ] **獨立 Admin 頁面**（`/admin` 路由，僅 org admin 可存取）
+### Phase 4 — 進階組織與權限管理 + Admin 後台 ✅
+- [x] **獨立 Admin 頁面**（`/admin` 路由，僅 super admin 可存取）
   - 使用者管理（清單、停用、角色變更）
-  - 頻道管理（建立、刪除、成員調整）
-  - 組織設定（訊息保留天數、全域通知）
-  - AI 助理管理（建立 / 編輯 / 停用 / 指派）
-  - 稽核日誌檢視（篩選、匯出）
-  - Integration API Key 管理（Phase 7 預留 UI）
-- [ ] 頻道進階管理：公開 / 私有 / 唯讀頻道
-- [ ] 成員邀請流程、角色進階權限（Admin / Member / Guest）
-- [ ] 通知設定（靜音、@mention）
-- [ ] 使用者個人資料與頭像
-- [ ] Web Push 訂閱管理（Service Worker + VAPID）
-- [ ] Presence 大規模廣播優化（只通知同頻道成員 + 批次彙總每 5 秒）
+  - 頻道管理（建立、刪除、成員調整、唯讀頻道）
+  - 組織設定（訊息保留天數）
+  - 稽核日誌檢視（篩選、分頁）
+  - Integration API Key 管理
+- [x] 頻道進階管理：公開 / 私有 / 唯讀頻道（readonly — 只有 super admin 可發文）
+- [x] 本地管理員帳號（SUPER_ADMIN_EMAIL / PASSWORD，獨立於 OIDC）
+- [x] OIDC 登入後自動加入組織與所有公開頻道（無需邀請）
+- [x] DM 一對一私人訊息（側邊欄 `+` 新增、hover `×` 離開、WS 即時通知對方）
+- [x] 側邊欄未讀訊息指示（紅點 / 數字 badge，收到新訊即時更新）
+- [x] 通知設定（靜音 per-channel toggle，側邊欄 hover 🔕）
+- [x] 使用者個人資料與頭像
+- [x] Web Push 訂閱管理（Service Worker + VAPID，離線推播，靜音頻道跳過）
+- [x] Presence 大規模廣播優化（只通知同頻道成員 + 批次彙總每 5 秒）
 
 ### Phase 5 — 多平台
 - [ ] Web App（PWA，可安裝至桌面/手機）
@@ -632,4 +634,4 @@ xekuchat/
 
 ---
 
-*最後更新：2026-03-16*
+*最後更新：2026-03-16（Phase 4 完成）*

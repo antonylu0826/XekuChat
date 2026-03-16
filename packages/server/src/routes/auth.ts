@@ -25,6 +25,9 @@ authRoutes.get("/callback", async (c) => {
     const userInfo = await getUserInfo(tokenSet.access_token);
 
     // Upsert user
+    const superAdminEmail = process.env.SUPER_ADMIN_EMAIL;
+    const isSuperAdmin = superAdminEmail === userInfo.email;
+
     const user = await prisma.user.upsert({
       where: { email: userInfo.email },
       update: {
@@ -32,6 +35,7 @@ authRoutes.get("/callback", async (c) => {
         avatar: userInfo.picture || null,
         sub: userInfo.sub,
         provider: userInfo.provider,
+        ...(isSuperAdmin && { isSuperAdmin: true }),
       },
       create: {
         email: userInfo.email,
@@ -39,8 +43,12 @@ authRoutes.get("/callback", async (c) => {
         avatar: userInfo.picture || null,
         sub: userInfo.sub,
         provider: userInfo.provider,
+        isSuperAdmin,
       },
     });
+
+    // Auto-join all orgs and their public channels
+    await autoJoinOrgs(user.id);
 
     // Issue JWT
     const { accessToken, refreshToken } = await createTokens(user.id);
@@ -99,14 +107,51 @@ authRoutes.get("/me", async (c) => {
     const payload = await verifyAccessToken(authHeader.slice(7));
     const user = await prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { id: true, email: true, name: true, avatar: true, isBot: true, status: true },
+      select: { id: true, email: true, name: true, avatar: true, isBot: true, isDisabled: true, isSuperAdmin: true, status: true },
     });
+    if (user?.isDisabled) return c.json({ error: "Account disabled" }, 403);
 
-    if (!user) return c.json({ error: "User not found" }, 404);
+    if (!user) return c.json({ error: "User not found" }, 401);
     return c.json({ success: true, data: user });
   } catch {
     return c.json({ error: "Invalid token" }, 401);
   }
+});
+
+// Admin login — email/password from env, works in all environments
+authRoutes.post("/admin-login", async (c) => {
+  const { email, password } = await c.req.json<{ email: string; password: string }>();
+
+  const adminEmail = process.env.SUPER_ADMIN_EMAIL;
+  const adminPassword = process.env.SUPER_ADMIN_PASSWORD;
+
+  if (!adminEmail || !adminPassword) {
+    return c.json({ error: "Admin login not configured" }, 403);
+  }
+
+  if (email !== adminEmail || password !== adminPassword) {
+    return c.json({ error: "Invalid credentials" }, 401);
+  }
+
+  const user = await prisma.user.upsert({
+    where: { email },
+    update: { isSuperAdmin: true },
+    create: { email, name: email.split("@")[0], provider: "local", isSuperAdmin: true },
+  });
+
+  await autoJoinOrgs(user.id);
+
+  const { accessToken, refreshToken } = await createTokens(user.id);
+
+  setCookie(c, "refresh_token", refreshToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "Lax",
+    path: "/auth",
+    maxAge: 7 * 24 * 60 * 60,
+  });
+
+  return c.json({ success: true, data: { accessToken } });
 });
 
 // Test-only login (creates user + returns JWT, disabled in production)
@@ -120,11 +165,16 @@ authRoutes.post("/test-login", async (c) => {
     return c.json({ error: "email and name are required" }, 400);
   }
 
+  const superAdminEmail = process.env.SUPER_ADMIN_EMAIL;
+  const isSuperAdmin = superAdminEmail === email;
+
   const user = await prisma.user.upsert({
     where: { email },
-    update: { name },
-    create: { email, name, provider: "test" },
+    update: { name, ...(isSuperAdmin && { isSuperAdmin: true }) },
+    create: { email, name, provider: "test", isSuperAdmin },
   });
+
+  await autoJoinOrgs(user.id);
 
   const { accessToken } = await createTokens(user.id);
 
@@ -139,3 +189,31 @@ authRoutes.post("/logout", (c) => {
   deleteCookie(c, "refresh_token", { path: "/auth" });
   return c.json({ success: true });
 });
+
+// ============================================================
+// Auto-join helper: adds user to all orgs and their public channels
+// ============================================================
+async function autoJoinOrgs(userId: string) {
+  const orgs = await prisma.organization.findMany({ select: { id: true } });
+
+  for (const org of orgs) {
+    await prisma.orgMember.upsert({
+      where: { userId_orgId: { userId, orgId: org.id } },
+      update: {},
+      create: { userId, orgId: org.id, role: "member" },
+    });
+
+    const publicChannels = await prisma.channel.findMany({
+      where: { orgId: org.id, isPrivate: false, type: { not: "dm" } },
+      select: { id: true },
+    });
+
+    for (const ch of publicChannels) {
+      await prisma.channelMember.upsert({
+        where: { userId_channelId: { userId, channelId: ch.id } },
+        update: {},
+        create: { userId, channelId: ch.id, role: "member" },
+      });
+    }
+  }
+}

@@ -12,6 +12,9 @@ import { tusRoutes } from "./routes/tus";
 import { searchRoutes } from "./routes/search";
 import { reactionRoutes } from "./routes/reaction";
 import { previewRoutes } from "./routes/preview";
+import { adminRoutes } from "./routes/admin";
+import { userRoutes } from "./routes/user";
+import { pushRoutes } from "./routes/push";
 import { redis, redisSub } from "./lib/redis";
 import { prisma } from "./lib/prisma";
 import { verifyAccessToken } from "./auth/jwt";
@@ -45,6 +48,9 @@ app.route("/api/tus", tusRoutes);
 app.route("/api/search", searchRoutes);
 app.route("/api/reactions", reactionRoutes);
 app.route("/api/preview", previewRoutes);
+app.route("/api/admin", adminRoutes);
+app.route("/api/users", userRoutes);
+app.route("/api/push", pushRoutes);
 
 // ---- Initialize services ----
 initPubSub();

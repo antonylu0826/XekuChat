@@ -17,6 +17,12 @@ orgRoutes.post("/", async (c) => {
     return c.json({ error: "name and slug are required" }, 400);
   }
 
+  // Only super admins can create organizations
+  const actor = await prisma.user.findUnique({ where: { id: userId }, select: { isSuperAdmin: true } });
+  if (!actor?.isSuperAdmin) {
+    return c.json({ error: "Only system admin can create organizations" }, 403);
+  }
+
   // Check slug uniqueness
   const existing = await prisma.organization.findUnique({ where: { slug } });
   if (existing) {

@@ -43,10 +43,12 @@ export function useAuth() {
         // Try refresh
         const refreshed = await refreshToken();
         if (!refreshed) {
+          sessionStorage.removeItem("access_token");
           setState({ user: null, token: null, loading: false });
         }
       }
     } catch {
+      sessionStorage.removeItem("access_token");
       setState({ user: null, token: null, loading: false });
     }
   }
