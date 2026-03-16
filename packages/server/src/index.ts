@@ -32,7 +32,11 @@ app.use("*", secureHeaders());
 app.use(
   "*",
   cors({
-    origin: process.env.APP_URL || "http://localhost:5173",
+    // In dev, accept any origin so zrok / other tunnels work without reconfiguring.
+    // In production, restrict to APP_URL.
+    origin: process.env.NODE_ENV === "development"
+      ? (origin) => origin ?? "*"
+      : process.env.APP_URL || "http://localhost:5173",
     credentials: true,
   })
 );

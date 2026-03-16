@@ -72,7 +72,43 @@ services:
       postgres:
         condition: service_healthy
 
+  # ---- Dev reverse proxy (Caddy) ──────────────────────────────
+  # Merges API server (3000) + Vite dev server (5173) into a single
+  # HTTP entry point on port 8888, used by the zrok tunnel below.
+  # Enable with: docker compose --profile zrok up -d
+  caddy-dev:
+    image: caddy:alpine
+    restart: unless-stopped
+    profiles: [zrok]
+    ports:
+      - "8888:80"
+    volumes:
+      - ./docker/caddy/Caddyfile.dev:/etc/caddy/Caddyfile:ro
+    # Allow container to reach services running on the host
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # ---- zrok tunnel ─────────────────────────────────────────────
+  # Creates a public HTTPS URL → caddy-dev → API + Vite.
+  # Requires: ZROK_ENABLE_TOKEN in .env (free account at https://zrok.io)
+  # Enable with: docker compose --profile zrok up -d
+  zrok:
+    image: openziti/zrok
+    restart: unless-stopped
+    profiles: [zrok]
+    environment:
+      ZROK_ENABLE_TOKEN: ${ZROK_ENABLE_TOKEN:-}
+      ZROK_TARGET: http://caddy-dev
+      HOME: /home/zrok
+    volumes:
+      - zrok_data:/home/zrok/.zrok
+      - ./docker/zrok/entrypoint.sh:/entrypoint.sh:ro
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    depends_on:
+      - caddy-dev
+
 volumes:
   pg_data:
   redis_data:
   minio_data:
+  zrok_data:
