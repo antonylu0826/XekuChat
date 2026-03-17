@@ -872,47 +872,63 @@ function AuditLogsTab({ orgId, token }: { orgId: string; token: string }) {
 }
 
 // ============================================================
-// IntegrationsTab
+// IntegrationsTab (Integration API — Phase 8)
 // ============================================================
 
 interface IntegrationRow {
   id: string;
-  orgId: string;
   name: string;
   description: string | null;
+  apiKeyPrefix: string;
   webhookUrl: string | null;
+  rateLimit: number;
   isActive: boolean;
   createdAt: string;
+  channels: Array<{ channelId: string; permissions: string[] }>;
+  _count: { auditLogs: number; webhookDeliveries: number };
 }
 
 function IntegrationsTab({ orgId, token }: { orgId: string; token: string }) {
   const { t } = useTranslation();
   const [integrations, setIntegrations] = useState<IntegrationRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Create form
+  const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
   const [newWebhook, setNewWebhook] = useState("");
+  const [newRateLimit, setNewRateLimit] = useState(60);
   const [creating, setCreating] = useState(false);
-  const [plainKey, setPlainKey] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+
+  // One-time key display
+  const [createdKey, setCreatedKey] = useState<{ apiKey: string; webhookSecret: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  // Edit
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", description: "", webhookUrl: "", rateLimit: 60 });
+
+  const api = (path: string, opts?: RequestInit) =>
+    fetch(`/api/admin/${orgId}/integrations-api${path}`, {
+      ...opts,
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...opts?.headers },
+    });
 
   const fetchIntegrations = async () => {
     try {
-      const res = await fetch(`/api/admin/${orgId}/integrations`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await api("");
       const data = await res.json();
       if (data.success) setIntegrations(data.data);
     } catch {
-      setError(t("admin.integrations.errors.load"));
+      setError("Failed to load integrations");
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchIntegrations();
-  }, [orgId]);
+  useEffect(() => { fetchIntegrations(); }, [orgId]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -920,173 +936,248 @@ function IntegrationsTab({ orgId, token }: { orgId: string; token: string }) {
     setCreating(true);
     setError(null);
     try {
-      const res = await fetch(`/api/admin/${orgId}/integrations`, {
+      const res = await api("", {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({
           name: newName,
           description: newDesc || undefined,
           webhookUrl: newWebhook || undefined,
+          rateLimit: newRateLimit,
         }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || t("admin.integrations.errors.create"));
+        setError(data.error);
       } else {
-        setPlainKey(data.data.plainKey);
-        setNewName("");
-        setNewDesc("");
-        setNewWebhook("");
+        setCreatedKey({ apiKey: data.data.apiKey, webhookSecret: data.data.webhookSecret });
+        setNewName(""); setNewDesc(""); setNewWebhook(""); setNewRateLimit(60);
+        setShowCreate(false);
         await fetchIntegrations();
       }
     } catch {
-      setError(t("admin.integrations.errors.create"));
+      setError("Failed to create integration");
     } finally {
       setCreating(false);
     }
   };
 
-  const handleToggleActive = async (integration: IntegrationRow) => {
+  const handleUpdate = async (id: string) => {
     try {
-      await fetch(`/api/admin/${orgId}/integrations/${integration.id}`, {
+      await api(`/${id}`, {
         method: "PATCH",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ isActive: !integration.isActive }),
+        body: JSON.stringify({
+          name: editForm.name,
+          description: editForm.description || undefined,
+          webhookUrl: editForm.webhookUrl || undefined,
+          rateLimit: editForm.rateLimit,
+        }),
       });
+      setEditingId(null);
       await fetchIntegrations();
     } catch {
-      setError(t("admin.integrations.errors.update"));
+      setError("Failed to update");
     }
   };
 
-  const handleDelete = async (integration: IntegrationRow) => {
-    if (!confirm(t("admin.integrations.deleteConfirm", { name: integration.name }))) return;
-    try {
-      await fetch(`/api/admin/${orgId}/integrations/${integration.id}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
+  const handleToggle = async (int: IntegrationRow) => {
+    await api(`/${int.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ isActive: !int.isActive }),
+    });
+    await fetchIntegrations();
+  };
+
+  const handleRegenerateKey = async (id: string) => {
+    if (!confirm("Regenerate API key? The old key will stop working immediately.")) return;
+    const res = await api(`/${id}/regenerate-key`, { method: "POST" });
+    const data = await res.json();
+    if (data.success) {
+      setCreatedKey({ apiKey: data.data.apiKey, webhookSecret: "" });
       await fetchIntegrations();
-    } catch {
-      setError(t("admin.integrations.errors.delete"));
     }
+  };
+
+  const handleDelete = async (int: IntegrationRow) => {
+    if (!confirm(`Delete integration "${int.name}"? This cannot be undone.`)) return;
+    await api(`/${int.id}`, { method: "DELETE" });
+    await fetchIntegrations();
+  };
+
+  const startEdit = (int: IntegrationRow) => {
+    setEditingId(int.id);
+    setEditForm({
+      name: int.name,
+      description: int.description || "",
+      webhookUrl: int.webhookUrl || "",
+      rateLimit: int.rateLimit,
+    });
   };
 
   if (loading) return <div className="text-slate-400">Loading...</div>;
 
   return (
     <div>
-      <h2 className="mb-4 text-xl font-bold">{t("admin.integrations.title")}</h2>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-xl font-bold">Integration API</h2>
+        <button
+          onClick={() => setShowCreate(!showCreate)}
+          className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+        >
+          {showCreate ? t("common.cancel") : t("admin.integrations.create")}
+        </button>
+      </div>
 
       {error && (
         <div className="mb-4 rounded bg-red-900/50 px-4 py-2 text-sm text-red-300">{error}</div>
       )}
 
-      {/* Plain key modal */}
-      {plainKey && (
+      {/* One-time key display modal */}
+      {createdKey && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="w-full max-w-md rounded-lg bg-slate-800 p-6 shadow-xl">
+          <div className="w-full max-w-lg rounded-lg bg-slate-800 p-6 shadow-xl">
             <h3 className="mb-2 text-lg font-bold text-white">{t("admin.integrations.apiKeyCreated")}</h3>
-            <p className="mb-3 text-sm text-yellow-400">
-              {t("admin.integrations.apiKeyWarning")}
-            </p>
-            <div className="mb-4 rounded bg-slate-900 px-3 py-2 font-mono text-sm text-green-300 break-all">
-              {plainKey}
+            <p className="mb-3 text-sm text-yellow-400">{t("admin.integrations.apiKeyWarning")}</p>
+            <label className="mb-1 block text-xs font-semibold text-slate-400">API Key</label>
+            <div className="mb-3 rounded bg-slate-900 px-3 py-2 font-mono text-sm text-green-300 break-all select-all">
+              {createdKey.apiKey}
             </div>
-            <button
-              onClick={() => setPlainKey(null)}
-              className="w-full rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-            >
-              {t("admin.integrations.apiKeyCopied")}
-            </button>
+            {createdKey.webhookSecret && (
+              <>
+                <label className="mb-1 block text-xs font-semibold text-slate-400">Webhook Secret</label>
+                <div className="mb-3 rounded bg-slate-900 px-3 py-2 font-mono text-sm text-green-300 break-all select-all">
+                  {createdKey.webhookSecret}
+                </div>
+              </>
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={() => { navigator.clipboard.writeText(createdKey.apiKey); setCopied(true); }}
+                className="flex-1 rounded bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-600"
+              >
+                {copied ? "✓ Copied" : "Copy API Key"}
+              </button>
+              <button
+                onClick={() => { setCreatedKey(null); setCopied(false); }}
+                className="flex-1 rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                {t("admin.integrations.apiKeyCopied")}
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       {/* Create form */}
-      <form onSubmit={handleCreate} className="mb-6 space-y-2">
-        <div className="flex flex-wrap gap-2">
-          <input
-            type="text"
-            placeholder={t("admin.integrations.namePlaceholder")}
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            className="flex-1 rounded border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white placeholder-slate-400"
-            required
-          />
-          <input
-            type="text"
-            placeholder={t("admin.integrations.descriptionPlaceholder")}
-            value={newDesc}
-            onChange={(e) => setNewDesc(e.target.value)}
-            className="flex-1 rounded border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white placeholder-slate-400"
-          />
-          <input
-            type="url"
-            placeholder={t("admin.integrations.webhookPlaceholder")}
-            value={newWebhook}
-            onChange={(e) => setNewWebhook(e.target.value)}
-            className="flex-1 rounded border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white placeholder-slate-400"
-          />
-          <button
-            type="submit"
-            disabled={creating}
-            className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-          >
+      {showCreate && (
+        <form onSubmit={handleCreate} className="mb-6 rounded-lg border border-slate-700 bg-slate-800/50 p-4 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-400">{t("admin.integrations.namePlaceholder")}</label>
+              <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)}
+                className="w-full rounded border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white" required />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-400">{t("admin.integrations.descriptionPlaceholder")}</label>
+              <input type="text" value={newDesc} onChange={(e) => setNewDesc(e.target.value)}
+                className="w-full rounded border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-400">Webhook URL</label>
+              <input type="url" value={newWebhook} onChange={(e) => setNewWebhook(e.target.value)}
+                className="w-full rounded border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white"
+                placeholder="https://example.com/webhook" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-400">Rate Limit (req/min)</label>
+              <input type="number" value={newRateLimit} onChange={(e) => setNewRateLimit(Number(e.target.value))}
+                min={1} max={1000}
+                className="w-full rounded border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white" />
+            </div>
+          </div>
+          <button type="submit" disabled={creating}
+            className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
             {creating ? t("admin.integrations.creating") : t("admin.integrations.create")}
           </button>
-        </div>
-      </form>
+        </form>
+      )}
 
-      {/* Integrations table */}
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr>
-            <th className="border-b border-slate-700 pb-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-              {t("admin.integrations.columns.name")}
-            </th>
-            <th className="border-b border-slate-700 pb-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-              {t("admin.integrations.columns.description")}
-            </th>
-            <th className="border-b border-slate-700 pb-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-              {t("admin.integrations.columns.active")}
-            </th>
-            <th className="border-b border-slate-700 pb-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-              {t("admin.integrations.columns.created")}
-            </th>
-            <th className="border-b border-slate-700 pb-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-              {t("admin.integrations.columns.actions")}
-            </th>
-          </tr>
-        </thead>
-        <tbody>
+      {/* Integrations list */}
+      {integrations.length === 0 ? (
+        <p className="text-sm text-slate-400">No integrations yet.</p>
+      ) : (
+        <div className="space-y-3">
           {integrations.map((int) => (
-            <tr key={int.id} className="border-b border-slate-700">
-              <td className="py-3 pr-4 font-medium">{int.name}</td>
-              <td className="py-3 pr-4 text-slate-400">{int.description || "—"}</td>
-              <td className="py-3 pr-4">
-                <input
-                  type="checkbox"
-                  checked={int.isActive}
-                  onChange={() => handleToggleActive(int)}
-                  className="h-4 w-4 cursor-pointer accent-blue-500"
-                />
-              </td>
-              <td className="py-3 pr-4 text-xs text-slate-400">
-                {new Date(int.createdAt).toLocaleDateString()}
-              </td>
-              <td className="py-3">
-                <button
-                  onClick={() => handleDelete(int)}
-                  className="rounded px-2 py-1 text-xs text-red-400 hover:bg-red-900/30"
-                >
-                  {t("admin.integrations.delete")}
-                </button>
-              </td>
-            </tr>
+            <div key={int.id} className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+              {editingId === int.id ? (
+                /* Edit mode */
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                      className="rounded border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white" />
+                    <input value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                      placeholder="Description"
+                      className="rounded border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white" />
+                    <input value={editForm.webhookUrl} onChange={(e) => setEditForm({ ...editForm, webhookUrl: e.target.value })}
+                      placeholder="Webhook URL" type="url"
+                      className="rounded border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white" />
+                    <input value={editForm.rateLimit} onChange={(e) => setEditForm({ ...editForm, rateLimit: Number(e.target.value) })}
+                      type="number" min={1} max={1000}
+                      className="rounded border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white" />
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => handleUpdate(int.id)}
+                      className="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700">Save</button>
+                    <button onClick={() => setEditingId(null)}
+                      className="rounded bg-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-600">{t("common.cancel")}</button>
+                  </div>
+                </div>
+              ) : (
+                /* Display mode */
+                <div>
+                  <div className="mb-2 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xl">🔗</span>
+                      <div>
+                        <h3 className="font-semibold text-white">{int.name}</h3>
+                        {int.description && <p className="text-xs text-slate-400">{int.description}</p>}
+                      </div>
+                      <span className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                        int.isActive ? "bg-green-900/50 text-green-400" : "bg-red-900/50 text-red-400"
+                      }`}>
+                        {int.isActive ? "Active" : "Inactive"}
+                      </span>
+                    </div>
+                    <div className="flex gap-1">
+                      <button onClick={() => startEdit(int)}
+                        className="rounded px-2 py-1 text-xs text-slate-300 hover:bg-slate-700">{t("common.edit")}</button>
+                      <button onClick={() => handleToggle(int)}
+                        className="rounded px-2 py-1 text-xs text-yellow-400 hover:bg-yellow-900/30">
+                        {int.isActive ? "Disable" : "Enable"}
+                      </button>
+                      <button onClick={() => handleDelete(int)}
+                        className="rounded px-2 py-1 text-xs text-red-400 hover:bg-red-900/30">{t("admin.integrations.delete")}</button>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-4 text-xs text-slate-400">
+                    <span>Key: <code className="text-slate-300">{int.apiKeyPrefix}</code></span>
+                    <span>Rate: {int.rateLimit} req/min</span>
+                    {int.webhookUrl && <span>Webhook: <code className="text-slate-300">{int.webhookUrl}</code></span>}
+                    <span>API calls: {int._count.auditLogs}</span>
+                    <span>Webhooks: {int._count.webhookDeliveries}</span>
+                    <span>Created: {new Date(int.createdAt).toLocaleDateString()}</span>
+                  </div>
+                  <div className="mt-2">
+                    <button onClick={() => handleRegenerateKey(int.id)}
+                      className="rounded px-2 py-1 text-xs text-orange-400 hover:bg-orange-900/30">
+                      Regenerate Key
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           ))}
-        </tbody>
-      </table>
+        </div>
+      )}
     </div>
   );
 }

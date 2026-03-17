@@ -17,6 +17,8 @@ import { checkRateLimit } from "./ratelimit";
 import { setUserOnline, setUserOffline } from "./presence";
 import { sendPushNotification } from "../lib/webpush";
 import { handleAITrigger } from "../ai/trigger";
+import { enqueueWebhookEvent } from "../integration/webhook";
+import { MENTION_PATTERN } from "@xekuchat/core";
 
 // ============================================================
 // WebSocket Message Handler
@@ -111,7 +113,7 @@ async function handleSendMessage(
   }
 
   // Block non-super-admins from sending to readonly channels
-  const channel = await prisma.channel.findUnique({ where: { id: event.channelId }, select: { type: true, name: true } });
+  const channel = await prisma.channel.findUnique({ where: { id: event.channelId }, select: { type: true, name: true, orgId: true } });
   if (channel?.type === "readonly") {
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { isSuperAdmin: true } });
     if (!user?.isSuperAdmin) {
@@ -212,6 +214,34 @@ async function handleSendMessage(
   // Fire-and-forget AI trigger (must not block message delivery)
   handleAITrigger(event.channelId, message.id, userId)
     .catch((err) => console.error("AI trigger error:", err));
+
+  // Fire-and-forget webhook events
+  const channelOrgId = channel?.orgId;
+  if (channelOrgId) {
+    enqueueWebhookEvent(channelOrgId, event.channelId, "message.created", {
+      channelId: event.channelId,
+      message: {
+        id: message.id,
+        content: message.content,
+        type: message.type,
+        sender: { id: message.sender.id, name: message.sender.name },
+      },
+    }).catch((err) => console.error("Webhook enqueue error:", err));
+
+    // Check for @mentions
+    const mentions = message.content.match(new RegExp(MENTION_PATTERN, "g"));
+    if (mentions) {
+      enqueueWebhookEvent(channelOrgId, event.channelId, "message.mention", {
+        channelId: event.channelId,
+        message: {
+          id: message.id,
+          content: message.content,
+          sender: { id: message.sender.id, name: message.sender.name },
+        },
+        mentions: mentions.map((m) => m.slice(1)), // strip @
+      }).catch((err) => console.error("Webhook mention error:", err));
+    }
+  }
 }
 
 async function handleRetractMessage(

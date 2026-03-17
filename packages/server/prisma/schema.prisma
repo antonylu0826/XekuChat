@@ -18,7 +18,8 @@ model Organization {
   members      OrgMember[]
   channels     Channel[]
   settings     OrgSettings?
-  aiAssistants AIAssistant[]
+  aiAssistants  AIAssistant[]
+  integrations  Integration[]
 
   createdAt DateTime @default(now())
 }
@@ -67,6 +68,7 @@ model User {
   readCursors        ChannelReadCursor[]
   pushSubscriptions  PushSubscription[]
   aiAssistant        AIAssistant?
+  integration        Integration?
 }
 
 // ============================================================
@@ -83,8 +85,9 @@ model Channel {
   org                 Organization         @relation(fields: [orgId], references: [id], onDelete: Cascade)
   members             ChannelMember[]
   messages            Message[]
-  aiAssistantChannels AIAssistantChannel[]
-  createdAt           DateTime             @default(now())
+  aiAssistantChannels  AIAssistantChannel[]
+  integrationChannels  IntegrationChannel[]
+  createdAt            DateTime             @default(now())
 
   @@index([orgId])
 }
@@ -222,21 +225,68 @@ model AIAssistantChannel {
 }
 
 // ============================================================
-// Integration API (Phase 7)
+// Integration API (Phase 8)
 // ============================================================
 
 model Integration {
-  id          String   @id @default(cuid())
-  orgId       String
-  name        String
-  description String?
-  apiKeyHash  String   @unique  // SHA-256 hash
-  webhookUrl  String?
-  permissions Json     @default("[]")
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
+  id            String   @id @default(cuid())
+  orgId         String
+  org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  name          String
+  description   String?
+  apiKeyHash    String   @unique   // SHA-256, verification only
+  apiKeyPrefix  String             // "xk_live_a3f8..." for UI display
+  webhookUrl    String?            // event callback URL
+  webhookSecret String?            // HMAC-SHA256 signing key
+  rateLimit     Int      @default(60) // requests per minute
+  isActive      Boolean  @default(true)
+  botUserId     String   @unique
+  botUser       User     @relation(fields: [botUserId], references: [id])
+  channels      IntegrationChannel[]
+  auditLogs     IntegrationAuditLog[]
+  webhookDeliveries WebhookDelivery[]
+  createdAt     DateTime @default(now())
 
   @@index([orgId])
+}
+
+model IntegrationChannel {
+  id            String      @id @default(cuid())
+  integrationId String
+  channelId     String
+  permissions   String[]    // ["send", "read", "webhook"]
+  integration   Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  channel       Channel     @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@unique([integrationId, channelId])
+}
+
+model IntegrationAuditLog {
+  id            String      @id @default(cuid())
+  integrationId String
+  endpoint      String
+  method        String
+  statusCode    Int
+  integration   Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now())
+
+  @@index([integrationId, createdAt])
+}
+
+model WebhookDelivery {
+  id            String      @id @default(cuid())
+  integrationId String
+  event         String      // "message.created", "message.mention"
+  payload       Json
+  status        String      @default("pending") // pending | success | failed
+  attempts      Int         @default(0)
+  lastAttemptAt DateTime?
+  responseCode  Int?
+  integration   Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now())
+
+  @@index([integrationId, createdAt])
+  @@index([status])
 }
 
 // ============================================================

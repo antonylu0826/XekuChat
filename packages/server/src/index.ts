@@ -16,6 +16,7 @@ import { adminRoutes } from "./routes/admin";
 import { userRoutes } from "./routes/user";
 import { pushRoutes } from "./routes/push";
 import { systemRoutes } from "./routes/system";
+import { v1Routes } from "./routes/v1";
 import { redis, redisSub } from "./lib/redis";
 import { prisma } from "./lib/prisma";
 import { verifyAccessToken } from "./auth/jwt";
@@ -24,6 +25,7 @@ import { startHeartbeat, stopHeartbeat, type WSData } from "./ws/connections";
 import { initPubSub } from "./ws/pubsub";
 import { startPresenceBatching, stopPresenceBatching } from "./ws/presence";
 import { ensureBucket } from "./lib/minio";
+import { startWebhookRetryWorker, stopWebhookRetryWorker } from "./integration/webhook";
 
 const app = new Hono();
 
@@ -57,11 +59,13 @@ app.route("/api/admin", adminRoutes);
 app.route("/api/users", userRoutes);
 app.route("/api/push", pushRoutes);
 app.route("/api/system", systemRoutes);
+app.route("/api/v1", v1Routes);
 
 // ---- Initialize services ----
 initPubSub();
 startHeartbeat();
 startPresenceBatching();
+startWebhookRetryWorker();
 ensureBucket().catch((err) => console.warn("MinIO bucket init:", err.message));
 initSuperAdminLocalAccount().catch((err) => console.warn("Super admin init:", err.message));
 
@@ -94,6 +98,7 @@ async function shutdown() {
   console.log("Shutting down...");
   stopHeartbeat();
   stopPresenceBatching();
+  stopWebhookRetryWorker();
   redisSub.disconnect();
   redis.disconnect();
   await prisma.$disconnect();

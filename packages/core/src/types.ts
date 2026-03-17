@@ -97,7 +97,9 @@ export type AuditAction =
   | "channel_delete"
   | "org_settings_update"
   | "integration_create"
+  | "integration_update"
   | "integration_delete"
+  | "integration_key_regenerate"
   | "ai_assistant_create"
   | "ai_assistant_update"
   | "ai_assistant_delete";

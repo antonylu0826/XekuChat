@@ -5,6 +5,7 @@ import { writeAuditLog } from "../audit/log";
 import { createHash, randomBytes } from "crypto";
 import { publishToChannel } from "../ws/pubsub";
 import { encrypt } from "../lib/crypto";
+import { generateApiKey, hashApiKey } from "../integration/apiKey";
 
 export const adminRoutes = new Hono();
 
@@ -392,113 +393,7 @@ adminRoutes.get("/:orgId/audit-logs", async (c) => {
 // Integrations
 // ============================================================
 
-// GET /:orgId/integrations — list all integrations (no apiKeyHash)
-adminRoutes.get("/:orgId/integrations", async (c) => {
-  const orgId = c.req.param("orgId");
-
-  const integrations = await prisma.integration.findMany({
-    where: { orgId },
-    select: {
-      id: true,
-      orgId: true,
-      name: true,
-      description: true,
-      webhookUrl: true,
-      permissions: true,
-      isActive: true,
-      createdAt: true,
-    },
-    orderBy: { createdAt: "desc" },
-  });
-
-  return c.json({ success: true, data: integrations });
-});
-
-// POST /:orgId/integrations — create integration
-adminRoutes.post("/:orgId/integrations", async (c) => {
-  const actorId = c.get("userId");
-  const orgId = c.req.param("orgId");
-  const body = await c.req.json<{ name: string; description?: string; webhookUrl?: string }>();
-
-  if (!body.name) {
-    return c.json({ error: "name is required" }, 400);
-  }
-
-  const plainKey = "xku_" + randomBytes(32).toString("hex");
-  const apiKeyHash = createHash("sha256").update(plainKey).digest("hex");
-
-  const integration = await prisma.integration.create({
-    data: {
-      orgId,
-      name: body.name,
-      description: body.description || null,
-      webhookUrl: body.webhookUrl || null,
-      apiKeyHash,
-    },
-    select: {
-      id: true,
-      orgId: true,
-      name: true,
-      description: true,
-      webhookUrl: true,
-      permissions: true,
-      isActive: true,
-      createdAt: true,
-    },
-  });
-
-  await writeAuditLog({
-    orgId,
-    action: "integration_create",
-    actorId,
-    targetId: integration.id,
-    meta: { name: body.name },
-  });
-
-  return c.json({ success: true, data: { ...integration, plainKey } }, 201);
-});
-
-// PATCH /:orgId/integrations/:id — update integration
-adminRoutes.patch("/:orgId/integrations/:id", async (c) => {
-  const orgId = c.req.param("orgId");
-  const id = c.req.param("id");
-  const body = await c.req.json<{ isActive: boolean }>();
-
-  const integration = await prisma.integration.update({
-    where: { id },
-    data: { isActive: body.isActive },
-    select: {
-      id: true,
-      orgId: true,
-      name: true,
-      description: true,
-      webhookUrl: true,
-      permissions: true,
-      isActive: true,
-      createdAt: true,
-    },
-  });
-
-  return c.json({ success: true, data: integration });
-});
-
-// DELETE /:orgId/integrations/:id — delete integration
-adminRoutes.delete("/:orgId/integrations/:id", async (c) => {
-  const actorId = c.get("userId");
-  const orgId = c.req.param("orgId");
-  const id = c.req.param("id");
-
-  await prisma.integration.delete({ where: { id } });
-
-  await writeAuditLog({
-    orgId,
-    action: "integration_delete",
-    actorId,
-    targetId: id,
-  });
-
-  return c.json({ success: true });
-});
+// Old integration routes removed — replaced by /:orgId/integrations-api routes below
 
 // ============================================================
 // AI Assistants
@@ -752,4 +647,296 @@ adminRoutes.delete("/:orgId/ai-assistants/:id/channels/:channelId", async (c) =>
   }
 
   return c.json({ success: true });
+});
+
+// ============================================================
+// Integrations (API)
+// ============================================================
+
+// GET /:orgId/integrations-api — list all integrations
+adminRoutes.get("/:orgId/integrations-api", async (c) => {
+  const orgId = c.req.param("orgId");
+
+  const integrations = await prisma.integration.findMany({
+    where: { orgId },
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      apiKeyPrefix: true,
+      webhookUrl: true,
+      rateLimit: true,
+      isActive: true,
+      botUserId: true,
+      createdAt: true,
+      channels: {
+        select: { channelId: true, permissions: true },
+      },
+      _count: {
+        select: { auditLogs: true, webhookDeliveries: true },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return c.json({ success: true, data: integrations });
+});
+
+// POST /:orgId/integrations-api — create integration
+adminRoutes.post("/:orgId/integrations-api", async (c) => {
+  const orgId = c.req.param("orgId");
+  const actorId = c.get("userId");
+  const body = await c.req.json<{
+    name: string;
+    description?: string;
+    webhookUrl?: string;
+    rateLimit?: number;
+  }>();
+
+  if (!body.name?.trim()) {
+    return c.json({ error: "Name is required" }, 400);
+  }
+
+  // Generate API key
+  const { raw, hash, prefix } = generateApiKey();
+
+  // Generate webhook secret
+  const webhookSecret = randomBytes(32).toString("hex");
+
+  // Create bot user for this integration
+  const botEmail = `integration-${Date.now()}@bot.xekuchat`;
+  const botUser = await prisma.user.create({
+    data: {
+      email: botEmail,
+      name: body.name,
+      provider: "bot",
+      isBot: true,
+      avatar: "🔗",
+    },
+  });
+
+  // Add bot to org
+  await prisma.orgMember.create({
+    data: { userId: botUser.id, orgId, role: "member" },
+  });
+
+  // Create integration
+  const integration = await prisma.integration.create({
+    data: {
+      orgId,
+      name: body.name,
+      description: body.description || null,
+      apiKeyHash: hash,
+      apiKeyPrefix: prefix,
+      webhookUrl: body.webhookUrl || null,
+      webhookSecret,
+      rateLimit: body.rateLimit || 60,
+      botUserId: botUser.id,
+    },
+  });
+
+  await writeAuditLog({
+    orgId,
+    action: "integration_create",
+    actorId,
+    targetId: integration.id,
+    meta: { name: body.name },
+  });
+
+  // Return the raw API key (shown once only!)
+  return c.json({
+    success: true,
+    data: {
+      id: integration.id,
+      name: integration.name,
+      apiKey: raw,
+      apiKeyPrefix: prefix,
+      webhookSecret,
+    },
+  }, 201);
+});
+
+// PATCH /:orgId/integrations-api/:id — update integration
+adminRoutes.patch("/:orgId/integrations-api/:id", async (c) => {
+  const orgId = c.req.param("orgId");
+  const id = c.req.param("id");
+  const actorId = c.get("userId");
+  const body = await c.req.json<{
+    name?: string;
+    description?: string;
+    webhookUrl?: string;
+    rateLimit?: number;
+    isActive?: boolean;
+  }>();
+
+  const updateData: Record<string, unknown> = {};
+  if (body.name !== undefined) updateData.name = body.name;
+  if (body.description !== undefined) updateData.description = body.description || null;
+  if (body.webhookUrl !== undefined) updateData.webhookUrl = body.webhookUrl || null;
+  if (body.rateLimit !== undefined) updateData.rateLimit = body.rateLimit;
+  if (body.isActive !== undefined) updateData.isActive = body.isActive;
+
+  const integration = await prisma.integration.update({
+    where: { id, orgId },
+    data: updateData,
+    select: { botUserId: true },
+  });
+
+  // Sync bot user name
+  if (body.name) {
+    await prisma.user.update({
+      where: { id: integration.botUserId },
+      data: { name: body.name },
+    });
+  }
+
+  await writeAuditLog({
+    orgId,
+    action: "integration_update",
+    actorId,
+    targetId: id,
+    meta: updateData,
+  });
+
+  return c.json({ success: true });
+});
+
+// POST /:orgId/integrations-api/:id/regenerate-key — regenerate API key
+adminRoutes.post("/:orgId/integrations-api/:id/regenerate-key", async (c) => {
+  const orgId = c.req.param("orgId");
+  const id = c.req.param("id");
+  const actorId = c.get("userId");
+
+  const { raw, hash, prefix } = generateApiKey();
+
+  await prisma.integration.update({
+    where: { id, orgId },
+    data: { apiKeyHash: hash, apiKeyPrefix: prefix },
+  });
+
+  await writeAuditLog({
+    orgId,
+    action: "integration_key_regenerate",
+    actorId,
+    targetId: id,
+  });
+
+  return c.json({ success: true, data: { apiKey: raw, apiKeyPrefix: prefix } });
+});
+
+// DELETE /:orgId/integrations-api/:id — delete integration
+adminRoutes.delete("/:orgId/integrations-api/:id", async (c) => {
+  const orgId = c.req.param("orgId");
+  const id = c.req.param("id");
+  const actorId = c.get("userId");
+
+  const integration = await prisma.integration.findUnique({
+    where: { id, orgId },
+    select: { name: true, botUserId: true },
+  });
+
+  if (!integration) {
+    return c.json({ error: "Integration not found" }, 404);
+  }
+
+  // Delete integration (cascades to channels, audit logs, webhook deliveries)
+  await prisma.integration.delete({ where: { id } });
+
+  // Remove bot user from all channels and org
+  await prisma.channelMember.deleteMany({ where: { userId: integration.botUserId } });
+  await prisma.orgMember.deleteMany({ where: { userId: integration.botUserId } });
+
+  await writeAuditLog({
+    orgId,
+    action: "integration_delete",
+    actorId,
+    targetId: id,
+    meta: { name: integration.name },
+  });
+
+  return c.json({ success: true });
+});
+
+// POST /:orgId/integrations-api/:id/channels — assign channel
+adminRoutes.post("/:orgId/integrations-api/:id/channels", async (c) => {
+  const id = c.req.param("id");
+  const { channelId, permissions } = await c.req.json<{
+    channelId: string;
+    permissions?: string[];
+  }>();
+
+  await prisma.integrationChannel.upsert({
+    where: { integrationId_channelId: { integrationId: id, channelId } },
+    update: { permissions: permissions || ["send", "read", "webhook"] },
+    create: {
+      integrationId: id,
+      channelId,
+      permissions: permissions || ["send", "read", "webhook"],
+    },
+  });
+
+  // Add bot user as channel member
+  const integration = await prisma.integration.findUnique({
+    where: { id },
+    select: { botUserId: true },
+  });
+  if (integration) {
+    await prisma.channelMember.upsert({
+      where: { userId_channelId: { userId: integration.botUserId, channelId } },
+      update: {},
+      create: { userId: integration.botUserId, channelId, role: "member" },
+    });
+  }
+
+  return c.json({ success: true }, 201);
+});
+
+// DELETE /:orgId/integrations-api/:id/channels/:channelId — unassign channel
+adminRoutes.delete("/:orgId/integrations-api/:id/channels/:channelId", async (c) => {
+  const id = c.req.param("id");
+  const channelId = c.req.param("channelId");
+
+  await prisma.integrationChannel.delete({
+    where: { integrationId_channelId: { integrationId: id, channelId } },
+  }).catch(() => {});
+
+  const integration = await prisma.integration.findUnique({
+    where: { id },
+    select: { botUserId: true },
+  });
+  if (integration) {
+    await prisma.channelMember.delete({
+      where: { userId_channelId: { userId: integration.botUserId, channelId } },
+    }).catch(() => {});
+  }
+
+  return c.json({ success: true });
+});
+
+// GET /:orgId/integrations-api/:id/audit-logs — get API call logs
+adminRoutes.get("/:orgId/integrations-api/:id/audit-logs", async (c) => {
+  const id = c.req.param("id");
+  const limit = parseInt(c.req.query("limit") || "100");
+
+  const logs = await prisma.integrationAuditLog.findMany({
+    where: { integrationId: id },
+    orderBy: { createdAt: "desc" },
+    take: Math.min(limit, 500),
+  });
+
+  return c.json({ success: true, data: logs });
+});
+
+// GET /:orgId/integrations-api/:id/webhook-deliveries — get webhook delivery logs
+adminRoutes.get("/:orgId/integrations-api/:id/webhook-deliveries", async (c) => {
+  const id = c.req.param("id");
+  const limit = parseInt(c.req.query("limit") || "100");
+
+  const deliveries = await prisma.webhookDelivery.findMany({
+    where: { integrationId: id },
+    orderBy: { createdAt: "desc" },
+    take: Math.min(limit, 500),
+  });
+
+  return c.json({ success: true, data: deliveries });
 });

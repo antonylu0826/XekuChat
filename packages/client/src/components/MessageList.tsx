@@ -118,9 +118,15 @@ export function MessageList({
               )}
 
               {/* Reply reference */}
-              {msg.replyToId && (
+              {msg.replyTo && (
                 <div className="mb-1 rounded border-l-2 border-slate-500 pl-2 text-xs text-slate-400">
-                  Replying to a message
+                  <span className="font-semibold text-slate-300">{msg.replyTo.sender?.name || "Unknown"}</span>
+                  {": "}
+                  {msg.replyTo.content
+                    ? msg.replyTo.content.length > 80
+                      ? msg.replyTo.content.slice(0, 77) + "..."
+                      : msg.replyTo.content
+                    : "message"}
                 </div>
               )}
 
