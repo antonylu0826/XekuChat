@@ -356,6 +356,7 @@ interface ChannelMember {
 interface ChannelListItem {
   id: string;
   name: string;
+  icon: string | null;
   type: string;
   isPrivate: boolean;
   _count?: { members: number; messages: number };
@@ -649,6 +650,16 @@ export function HomePage({ user, onLogout }: HomePageProps) {
     return () => window.removeEventListener("xeku:channel-joined", handler);
   }, [activeOrgId, loadChannels]);
 
+  // Update channel name/icon in sidebar when admin renames/re-icons a channel
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { channelId, name, icon } = (e as CustomEvent<{ channelId: string; name: string; icon: string | null }>).detail;
+      setChannels((prev) => prev.map((ch) => ch.id === channelId ? { ...ch, name, icon } : ch));
+    };
+    window.addEventListener("xeku:channel-updated", handler);
+    return () => window.removeEventListener("xeku:channel-updated", handler);
+  }, []);
+
   // Navigate to channel from push notification click
   useEffect(() => {
     const handler = (e: Event) => {
@@ -746,7 +757,7 @@ export function HomePage({ user, onLogout }: HomePageProps) {
                       }`}
                     >
                       <span className="truncate">
-                        {ch.type === "readonly" ? "📢 " : ""}
+                        {ch.icon ? `${ch.icon} ` : ch.type === "readonly" ? "📢 " : ""}
                         {isMuted ? "🔕 " : ""}
                         {ch.name}
                       </span>
@@ -926,13 +937,32 @@ export function HomePage({ user, onLogout }: HomePageProps) {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                 </svg>
               </button>
-              <h2 className="flex-1 truncate text-base font-semibold md:text-lg">
-                {activeChannelInfo?.type === "dm"
-                  ? (activeChannelInfo.members?.find((m) => m.userId !== user.id)?.user.name ?? activeChannelInfo.name)
-                  : activeChannelInfo?.type === "readonly"
-                    ? `📢 ${activeChannelInfo?.name || ""}`
-                    : activeChannelInfo?.name || ""}
-              </h2>
+              {activeChannelInfo?.type === "dm" && (() => {
+                const partner = activeChannelInfo.members?.find((m) => m.userId !== user.id)?.user;
+                return (
+                  <>
+                    {partner?.avatar ? (
+                      <img src={partner.avatar} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
+                    ) : (
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-medium">
+                        {(partner?.name ?? "?").charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <h2 className="flex-1 truncate text-base font-semibold md:text-lg">
+                      {partner?.name ?? activeChannelInfo.name}
+                    </h2>
+                  </>
+                );
+              })()}
+              {activeChannelInfo?.type !== "dm" && (
+                <h2 className="flex-1 truncate text-base font-semibold md:text-lg">
+                  {activeChannelInfo?.icon
+                    ? `${activeChannelInfo.icon} ${activeChannelInfo.name}`
+                    : activeChannelInfo?.type === "readonly"
+                      ? `📢 ${activeChannelInfo?.name || ""}`
+                      : activeChannelInfo?.name || ""}
+                </h2>
+              )}
               {user.isSuperAdmin && activeOrgId && (
                 <ChannelMenu orgId={activeOrgId} channelId={activeChannel!} token={token || ""} />
               )}

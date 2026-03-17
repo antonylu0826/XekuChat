@@ -70,11 +70,31 @@ export function useAuth() {
     window.location.href = "/auth/login";
   }, []);
 
+  const localLogin = useCallback(async (email: string, password: string): Promise<string | null> => {
+    try {
+      const res = await fetch("/auth/local-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email, password }),
+      });
+      const body = await res.json();
+      if (body.success && body.data.accessToken) {
+        sessionStorage.setItem("access_token", body.data.accessToken);
+        await fetchUser(body.data.accessToken);
+        return null;
+      }
+      return body.error || "Login failed";
+    } catch {
+      return "Login failed";
+    }
+  }, []);
+
   const logout = useCallback(async () => {
     await fetch("/auth/logout", { method: "POST", credentials: "include" });
     sessionStorage.removeItem("access_token");
     setState({ user: null, token: null, loading: false });
   }, []);
 
-  return { ...state, login, logout };
+  return { ...state, login, localLogin, logout };
 }

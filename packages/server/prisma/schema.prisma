@@ -52,6 +52,7 @@ model User {
   avatar    String?
   sub       String?  // OIDC subject identifier
   provider  String?  // keycloak | google | github | azure | oidc
+  passwordHash String?  // For local auth (provider="local")
   isBot        Boolean  @default(false)
   isDisabled   Boolean  @default(false)
   isSuperAdmin Boolean  @default(false)
@@ -74,6 +75,7 @@ model User {
 model Channel {
   id        String          @id @default(cuid())
   name      String
+  icon      String?         // emoji icon, e.g. "📢"
   type      String          @default("group") // group | dm | readonly
   isPrivate Boolean         @default(false)
   orgId     String

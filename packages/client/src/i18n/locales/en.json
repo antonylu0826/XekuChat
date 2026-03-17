@@ -6,8 +6,11 @@
   "auth": {
     "login": "Sign in",
     "loginWith": "Sign in with {{provider}}",
+    "orLoginWith": "or sign in with",
     "logout": "Sign out",
     "loggingIn": "Signing in...",
+    "email": "Email",
+    "password": "Password",
     "devLogin": "Dev Quick Login",
     "devName": "Display Name",
     "devEmail": "Email"
@@ -39,6 +42,85 @@
     "members": "Members",
     "settings": "Organization Settings",
     "invite": "Invite Member"
+  },
+  "admin": {
+    "panel": "Admin Panel",
+    "backToChat": "← Back to Chat",
+    "logout": "Logout",
+    "checkingAccess": "Checking access...",
+    "tabs": {
+      "users": "Users",
+      "channels": "Channels",
+      "settings": "Settings",
+      "auditLogs": "Audit Logs",
+      "integrations": "Integrations",
+      "localAccounts": "Local Accounts"
+    },
+    "users": {
+      "columns": { "user": "User", "role": "Role", "disabled": "Disabled", "actions": "Actions" },
+      "emailPlaceholder": "Email address",
+      "invite": "Invite", "inviting": "Inviting...", "remove": "Remove",
+      "removeConfirm": "Remove {{name}} from the organization?",
+      "roles": { "member": "Member", "admin": "Admin", "guest": "Guest" },
+      "errors": { "load": "Failed to load members", "invite": "Failed to invite user", "update": "Failed to update user", "remove": "Failed to remove user" }
+    },
+    "channels": {
+      "title": "Channels",
+      "create": "Create", "creating": "Creating...", "save": "Save", "delete": "Delete",
+      "deleteConfirm": "Delete channel #{{name}}? This will also delete all messages.",
+      "namePlaceholder": "Channel name", "iconPlaceholder": "icon",
+      "clickToEdit": "Click to edit", "members": "Members", "private": "Private",
+      "types": { "group": "Group", "readonly": "Readonly" },
+      "columns": { "name": "Name", "type": "Type", "members": "Members", "messages": "Messages", "actions": "Actions" },
+      "membersPanel": {
+        "title": "{{name}} Members",
+        "selectMember": "Select member to add", "add": "Add", "noMembers": "No members", "remove": "Remove"
+      },
+      "errors": { "load": "Failed to load channels", "create": "Failed to create channel", "rename": "Failed to rename channel", "delete": "Failed to delete channel" }
+    },
+    "settings": {
+      "title": "Settings",
+      "messageRetention": "Message Retention (days)",
+      "retentionPlaceholder": "Leave empty for forever",
+      "currentRetention": "Current value: {{days}} days",
+      "forever": "Forever (no expiry)",
+      "save": "Save", "saving": "Saving...", "saved": "Settings saved successfully.",
+      "errors": { "load": "Failed to load settings", "save": "Failed to save settings" }
+    },
+    "auditLogs": {
+      "title": "Audit Logs",
+      "allActions": "All actions", "filter": "Filter", "loading": "Loading...", "loadMore": "Load More",
+      "columns": { "date": "Date", "actor": "Actor", "action": "Action", "target": "Target", "meta": "Meta" },
+      "errors": { "load": "Failed to load audit logs" }
+    },
+    "integrations": {
+      "title": "Integrations",
+      "create": "Create", "creating": "Creating...", "delete": "Delete",
+      "deleteConfirm": "Delete integration \"{{name}}\"?",
+      "namePlaceholder": "Integration name", "descriptionPlaceholder": "Description (optional)", "webhookPlaceholder": "Webhook URL (optional)",
+      "apiKeyCreated": "API Key Created",
+      "apiKeyWarning": "This key will only be shown once. Copy it now and store it securely.",
+      "apiKeyCopied": "I have copied the key",
+      "columns": { "name": "Name", "description": "Description", "active": "Active", "created": "Created", "actions": "Actions" },
+      "errors": { "load": "Failed to load integrations", "create": "Failed to create integration", "update": "Failed to update integration", "delete": "Failed to delete integration" }
+    },
+    "localAccounts": {
+      "title": "Local Accounts",
+      "description": "Email/password accounts for direct login, independent of SSO.",
+      "create": "Create", "creating": "Creating...", "save": "Save", "cancel": "Cancel", "delete": "Delete",
+      "deleteConfirm": "Delete {{name}} ({{email}})?",
+      "changePassword": "Change Password",
+      "newPasswordPlaceholder": "New password", "displayNamePlaceholder": "Display name", "passwordPlaceholder": "Password",
+      "roles": { "superAdmin": "super admin", "user": "user" },
+      "columns": { "nameEmail": "Name / Email", "role": "Role", "disabled": "Disabled", "actions": "Actions" },
+      "errors": { "load": "Failed to load users", "create": "Failed to create user", "update": "Failed to update user", "updatePassword": "Failed to update password", "delete": "Failed to delete user" }
+    },
+    "setup": {
+      "title": "Create Organization",
+      "description": "No organization found. Please create one first.",
+      "namePlaceholder": "Organization name", "slugPlaceholder": "Slug (lowercase, hyphens)",
+      "create": "Create Organization", "creating": "Creating..."
+    }
   },
   "common": {
     "loading": "Loading...",

@@ -4,8 +4,13 @@ import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
   plugins: [tailwindcss(), react()],
+  optimizeDeps: {
+    include: ["emoji-mart", "@emoji-mart/react", "@emoji-mart/data"],
+  },
   server: {
     port: 5173,
+    host: true, // bind 0.0.0.0 so Docker containers can reach it via host.docker.internal
+    allowedHosts: true, // allow any host (zrok tunnels, etc.)
     proxy: {
       "/api": "http://localhost:3000",
       "/auth": "http://localhost:3000",

@@ -6,7 +6,7 @@ import { AdminPage } from "./pages/AdminPage";
 import { AdminLoginPage } from "./pages/AdminLoginPage";
 
 export function App() {
-  const { user, token, loading, login, logout } = useAuth();
+  const { user, token, loading, login, localLogin, logout } = useAuth();
   const location = useLocation();
   const isAdminRoute = location.pathname.startsWith("/admin");
 
@@ -42,7 +42,7 @@ export function App() {
 
   // Main chat routes: use SSO
   if (!user) {
-    return <LoginPage onLogin={login} />;
+    return <LoginPage onLogin={login} onLocalLogin={localLogin} />;
   }
 
   return (

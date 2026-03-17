@@ -32,6 +32,7 @@ export type ChannelRole = "admin" | "member";
 export interface ChannelInfo {
   id: string;
   name: string;
+  icon: string | null;
   type: ChannelType;
   isPrivate: boolean;
 }
@@ -77,6 +78,7 @@ export type WSServerEvent =
   | { type: "reaction:updated"; messageId: string; channelId: string; reactions: Array<{ emoji: string; count: number }> }
   | { type: "presence"; userId: string; status: UserStatus }
   | { type: "channel:joined"; channelId: string }
+  | { type: "channel:updated"; channelId: string; name: string; icon: string | null }
   | { type: "error"; code: string; message: string };
 
 // ---- Audit ----

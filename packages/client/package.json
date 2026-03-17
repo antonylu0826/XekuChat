@@ -10,13 +10,16 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@emoji-mart/data": "^1.2.1",
+    "@emoji-mart/react": "^1.1.1",
     "@xekuchat/core": "workspace:*",
+    "emoji-mart": "^5.6.0",
+    "i18next": "^24",
+    "i18next-browser-languagedetector": "^8",
     "react": "^19",
     "react-dom": "^19",
-    "react-router-dom": "^7",
-    "i18next": "^24",
     "react-i18next": "^15",
-    "i18next-browser-languagedetector": "^8"
+    "react-router-dom": "^7"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.2.1",

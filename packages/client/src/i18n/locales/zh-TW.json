@@ -6,8 +6,11 @@
   "auth": {
     "login": "登入",
     "loginWith": "使用 {{provider}} 登入",
+    "orLoginWith": "或使用",
     "logout": "登出",
     "loggingIn": "登入中...",
+    "email": "Email",
+    "password": "密碼",
     "devLogin": "開發快速登入",
     "devName": "顯示名稱",
     "devEmail": "Email"
@@ -39,6 +42,85 @@
     "members": "成員",
     "settings": "組織設定",
     "invite": "邀請成員"
+  },
+  "admin": {
+    "panel": "管理後台",
+    "backToChat": "← 返回聊天",
+    "logout": "登出",
+    "checkingAccess": "驗證權限中...",
+    "tabs": {
+      "users": "成員",
+      "channels": "頻道",
+      "settings": "設定",
+      "auditLogs": "稽核紀錄",
+      "integrations": "整合",
+      "localAccounts": "本地帳號"
+    },
+    "users": {
+      "columns": { "user": "使用者", "role": "角色", "disabled": "停用", "actions": "操作" },
+      "emailPlaceholder": "Email 地址",
+      "invite": "邀請", "inviting": "邀請中...", "remove": "移除",
+      "removeConfirm": "將 {{name}} 從組織中移除？",
+      "roles": { "member": "成員", "admin": "管理員", "guest": "訪客" },
+      "errors": { "load": "載入成員失敗", "invite": "邀請失敗", "update": "更新失敗", "remove": "移除失敗" }
+    },
+    "channels": {
+      "title": "頻道",
+      "create": "建立", "creating": "建立中...", "save": "儲存", "delete": "刪除",
+      "deleteConfirm": "刪除頻道 #{{name}}？此操作將同時刪除所有訊息。",
+      "namePlaceholder": "頻道名稱", "iconPlaceholder": "圖示",
+      "clickToEdit": "點擊編輯", "members": "成員", "private": "私有",
+      "types": { "group": "群組", "readonly": "唯讀" },
+      "columns": { "name": "名稱", "type": "類型", "members": "成員數", "messages": "訊息數", "actions": "操作" },
+      "membersPanel": {
+        "title": "{{name}} 成員管理",
+        "selectMember": "選擇要加入的成員", "add": "加入", "noMembers": "目前沒有成員", "remove": "移除"
+      },
+      "errors": { "load": "載入頻道失敗", "create": "建立頻道失敗", "rename": "重新命名失敗", "delete": "刪除頻道失敗" }
+    },
+    "settings": {
+      "title": "設定",
+      "messageRetention": "訊息保留天數",
+      "retentionPlaceholder": "留空表示永久保留",
+      "currentRetention": "目前設定：{{days}} 天",
+      "forever": "永久保留（不過期）",
+      "save": "儲存", "saving": "儲存中...", "saved": "設定已儲存。",
+      "errors": { "load": "載入設定失敗", "save": "儲存設定失敗" }
+    },
+    "auditLogs": {
+      "title": "稽核紀錄",
+      "allActions": "所有操作", "filter": "篩選", "loading": "載入中...", "loadMore": "載入更多",
+      "columns": { "date": "日期", "actor": "操作者", "action": "操作", "target": "目標", "meta": "詳情" },
+      "errors": { "load": "載入稽核紀錄失敗" }
+    },
+    "integrations": {
+      "title": "整合",
+      "create": "建立", "creating": "建立中...", "delete": "刪除",
+      "deleteConfirm": "刪除整合「{{name}}」？",
+      "namePlaceholder": "整合名稱", "descriptionPlaceholder": "說明（選填）", "webhookPlaceholder": "Webhook URL（選填）",
+      "apiKeyCreated": "API 金鑰已建立",
+      "apiKeyWarning": "此金鑰只會顯示一次，請立即複製並妥善保存。",
+      "apiKeyCopied": "我已複製金鑰",
+      "columns": { "name": "名稱", "description": "說明", "active": "啟用", "created": "建立時間", "actions": "操作" },
+      "errors": { "load": "載入整合失敗", "create": "建立整合失敗", "update": "更新整合失敗", "delete": "刪除整合失敗" }
+    },
+    "localAccounts": {
+      "title": "本地帳號",
+      "description": "Email/密碼帳號，直接登入，不依賴 SSO。",
+      "create": "建立", "creating": "建立中...", "save": "儲存", "cancel": "取消", "delete": "刪除",
+      "deleteConfirm": "刪除 {{name}}（{{email}}）？",
+      "changePassword": "修改密碼",
+      "newPasswordPlaceholder": "新密碼", "displayNamePlaceholder": "顯示名稱", "passwordPlaceholder": "密碼",
+      "roles": { "superAdmin": "超級管理員", "user": "使用者" },
+      "columns": { "nameEmail": "名稱 / Email", "role": "角色", "disabled": "停用", "actions": "操作" },
+      "errors": { "load": "載入使用者失敗", "create": "建立失敗", "update": "更新失敗", "updatePassword": "修改密碼失敗", "delete": "刪除失敗" }
+    },
+    "setup": {
+      "title": "建立組織",
+      "description": "尚未建立任何組織，請先建立一個。",
+      "namePlaceholder": "組織名稱", "slugPlaceholder": "Slug（英文小寫、連字符）",
+      "create": "建立組織", "creating": "建立中..."
+    }
   },
   "common": {
     "loading": "載入中...",

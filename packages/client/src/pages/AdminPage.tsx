@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import type { UserProfile } from "@xekuchat/core";
+import { EmojiPickerButton } from "../components/EmojiPickerButton";
 
 interface AdminPageProps {
   user: UserProfile;
@@ -7,7 +9,7 @@ interface AdminPageProps {
   onLogout: () => void;
 }
 
-type AdminTab = "users" | "channels" | "settings" | "audit-logs" | "integrations";
+type AdminTab = "users" | "channels" | "settings" | "audit-logs" | "integrations" | "local-users";
 
 // ============================================================
 // UsersTab
@@ -28,6 +30,7 @@ interface OrgMemberRow {
 }
 
 function UsersTab({ orgId, token, currentUser }: { orgId: string; token: string; currentUser: UserProfile }) {
+  const { t } = useTranslation();
   const [members, setMembers] = useState<OrgMemberRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [inviteEmail, setInviteEmail] = useState("");
@@ -43,7 +46,7 @@ function UsersTab({ orgId, token, currentUser }: { orgId: string; token: string;
       const data = await res.json();
       if (data.success) setMembers(data.data);
     } catch {
-      setError("Failed to load members");
+      setError(t("admin.users.errors.load"));
     } finally {
       setLoading(false);
     }
@@ -66,13 +69,13 @@ function UsersTab({ orgId, token, currentUser }: { orgId: string; token: string;
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Failed to invite");
+        setError(data.error || t("admin.users.errors.invite"));
       } else {
         setInviteEmail("");
         await fetchMembers();
       }
     } catch {
-      setError("Failed to invite user");
+      setError(t("admin.users.errors.invite"));
     } finally {
       setInviting(false);
     }
@@ -87,12 +90,12 @@ function UsersTab({ orgId, token, currentUser }: { orgId: string; token: string;
       });
       await fetchMembers();
     } catch {
-      setError("Failed to update user");
+      setError(t("admin.users.errors.update"));
     }
   };
 
   const handleRemove = async (member: OrgMemberRow) => {
-    if (!confirm(`Remove ${member.user.name} from the organization?`)) return;
+    if (!confirm(t("admin.users.removeConfirm", { name: member.user.name }))) return;
     try {
       await fetch(`/api/admin/${orgId}/users/${member.user.id}`, {
         method: "DELETE",
@@ -100,7 +103,7 @@ function UsersTab({ orgId, token, currentUser }: { orgId: string; token: string;
       });
       await fetchMembers();
     } catch {
-      setError("Failed to remove user");
+      setError(t("admin.users.errors.remove"));
     }
   };
 
@@ -108,7 +111,7 @@ function UsersTab({ orgId, token, currentUser }: { orgId: string; token: string;
 
   return (
     <div>
-      <h2 className="mb-4 text-xl font-bold">Users</h2>
+      <h2 className="mb-4 text-xl font-bold">{t("admin.tabs.users")}</h2>
 
       {error && (
         <div className="mb-4 rounded bg-red-900/50 px-4 py-2 text-sm text-red-300">{error}</div>
@@ -118,7 +121,7 @@ function UsersTab({ orgId, token, currentUser }: { orgId: string; token: string;
       <form onSubmit={handleInvite} className="mb-6 flex gap-2">
         <input
           type="email"
-          placeholder="Email address"
+          placeholder={t("admin.users.emailPlaceholder")}
           value={inviteEmail}
           onChange={(e) => setInviteEmail(e.target.value)}
           className="flex-1 rounded border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white placeholder-slate-400"
@@ -129,16 +132,16 @@ function UsersTab({ orgId, token, currentUser }: { orgId: string; token: string;
           onChange={(e) => setInviteRole(e.target.value)}
           className="rounded border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white"
         >
-          <option value="member">Member</option>
-          <option value="admin">Admin</option>
-          <option value="guest">Guest</option>
+          <option value="member">{t("admin.users.roles.member")}</option>
+          <option value="admin">{t("admin.users.roles.admin")}</option>
+          <option value="guest">{t("admin.users.roles.guest")}</option>
         </select>
         <button
           type="submit"
           disabled={inviting}
           className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
         >
-          {inviting ? "Inviting..." : "Invite"}
+          {inviting ? t("admin.users.inviting") : t("admin.users.invite")}
         </button>
       </form>
 
@@ -147,16 +150,16 @@ function UsersTab({ orgId, token, currentUser }: { orgId: string; token: string;
         <thead>
           <tr>
             <th className="border-b border-slate-700 pb-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-              User
+              {t("admin.users.columns.user")}
             </th>
             <th className="border-b border-slate-700 pb-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Role
+              {t("admin.users.columns.role")}
             </th>
             <th className="border-b border-slate-700 pb-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Disabled
+              {t("admin.users.columns.disabled")}
             </th>
             <th className="border-b border-slate-700 pb-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Actions
+              {t("admin.users.columns.actions")}
             </th>
           </tr>
         </thead>
@@ -206,7 +209,7 @@ function UsersTab({ orgId, token, currentUser }: { orgId: string; token: string;
                     onClick={() => handleRemove(m)}
                     className="rounded px-2 py-1 text-xs text-red-400 hover:bg-red-900/30"
                   >
-                    Remove
+                    {t("admin.users.remove")}
                   </button>
                 </td>
               </tr>
@@ -224,6 +227,7 @@ function UsersTab({ orgId, token, currentUser }: { orgId: string; token: string;
 interface ChannelRow {
   id: string;
   name: string;
+  icon: string | null;
   type: string;
   isPrivate: boolean;
   orgId: string;
@@ -232,14 +236,19 @@ interface ChannelRow {
 }
 
 function ChannelsTab({ orgId, token }: { orgId: string; token: string }) {
+  const { t } = useTranslation();
   const [channels, setChannels] = useState<ChannelRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState("");
+  const [newIcon, setNewIcon] = useState("");
   const [newType, setNewType] = useState("group");
   const [newPrivate, setNewPrivate] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [managingChannel, setManagingChannel] = useState<ChannelRow | null>(null);
+  const [editingChannel, setEditingChannel] = useState<ChannelRow | null>(null);
+  const [editingName, setEditingName] = useState("");
+  const [editingIcon, setEditingIcon] = useState("");
 
   const fetchChannels = async () => {
     try {
@@ -249,7 +258,7 @@ function ChannelsTab({ orgId, token }: { orgId: string; token: string }) {
       const data = await res.json();
       if (data.success) setChannels(data.data);
     } catch {
-      setError("Failed to load channels");
+      setError(t("admin.channels.errors.load"));
     } finally {
       setLoading(false);
     }
@@ -268,26 +277,44 @@ function ChannelsTab({ orgId, token }: { orgId: string; token: string }) {
       const res = await fetch(`/api/admin/${orgId}/channels`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newName, type: newType, isPrivate: newPrivate }),
+        body: JSON.stringify({ name: newName, type: newType, isPrivate: newPrivate, icon: newIcon || null }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Failed to create channel");
+        setError(data.error || t("admin.channels.errors.create"));
       } else {
         setNewName("");
+        setNewIcon("");
         setNewType("group");
         setNewPrivate(false);
         await fetchChannels();
       }
     } catch {
-      setError("Failed to create channel");
+      setError(t("admin.channels.errors.create"));
     } finally {
       setCreating(false);
     }
   };
 
+  const handleRename = async () => {
+    if (!editingChannel || !editingName.trim()) return;
+    try {
+      await fetch(`/api/admin/${orgId}/channels/${editingChannel.id}`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ name: editingName.trim(), icon: editingIcon || null }),
+      });
+      setEditingChannel(null);
+      setEditingName("");
+      setEditingIcon("");
+      await fetchChannels();
+    } catch {
+      setError(t("admin.channels.errors.rename"));
+    }
+  };
+
   const handleDelete = async (channel: ChannelRow) => {
-    if (!confirm(`Delete channel #${channel.name}? This will also delete all messages.`)) return;
+    if (!confirm(t("admin.channels.deleteConfirm", { name: channel.name }))) return;
     try {
       await fetch(`/api/admin/${orgId}/channels/${channel.id}`, {
         method: "DELETE",
@@ -295,7 +322,7 @@ function ChannelsTab({ orgId, token }: { orgId: string; token: string }) {
       });
       await fetchChannels();
     } catch {
-      setError("Failed to delete channel");
+      setError(t("admin.channels.errors.delete"));
     }
   };
 
@@ -303,7 +330,7 @@ function ChannelsTab({ orgId, token }: { orgId: string; token: string }) {
 
   return (
     <div>
-      <h2 className="mb-4 text-xl font-bold">Channels</h2>
+      <h2 className="mb-4 text-xl font-bold">{t("admin.channels.title")}</h2>
 
       {error && (
         <div className="mb-4 rounded bg-red-900/50 px-4 py-2 text-sm text-red-300">{error}</div>
@@ -311,9 +338,10 @@ function ChannelsTab({ orgId, token }: { orgId: string; token: string }) {
 
       {/* Create form */}
       <form onSubmit={handleCreate} className="mb-6 flex flex-wrap gap-2">
+        <EmojiPickerButton value={newIcon} onChange={setNewIcon} placeholder={t("admin.channels.iconPlaceholder")} />
         <input
           type="text"
-          placeholder="Channel name"
+          placeholder={t("admin.channels.namePlaceholder")}
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
           className="rounded border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white placeholder-slate-400"
@@ -324,8 +352,8 @@ function ChannelsTab({ orgId, token }: { orgId: string; token: string }) {
           onChange={(e) => setNewType(e.target.value)}
           className="rounded border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white"
         >
-          <option value="group">Group</option>
-          <option value="readonly">Readonly</option>
+          <option value="group">{t("admin.channels.types.group")}</option>
+          <option value="readonly">{t("admin.channels.types.readonly")}</option>
         </select>
         <label className="flex items-center gap-1 text-sm text-slate-300">
           <input
@@ -334,14 +362,14 @@ function ChannelsTab({ orgId, token }: { orgId: string; token: string }) {
             onChange={(e) => setNewPrivate(e.target.checked)}
             className="accent-blue-500"
           />
-          Private
+          {t("admin.channels.private")}
         </label>
         <button
           type="submit"
           disabled={creating}
           className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
         >
-          {creating ? "Creating..." : "Create"}
+          {creating ? t("admin.channels.creating") : t("admin.channels.create")}
         </button>
       </form>
 
@@ -350,19 +378,19 @@ function ChannelsTab({ orgId, token }: { orgId: string; token: string }) {
         <thead>
           <tr>
             <th className="border-b border-slate-700 pb-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Name
+              {t("admin.channels.columns.name")}
             </th>
             <th className="border-b border-slate-700 pb-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Type
+              {t("admin.channels.columns.type")}
             </th>
             <th className="border-b border-slate-700 pb-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Members
+              {t("admin.channels.columns.members")}
             </th>
             <th className="border-b border-slate-700 pb-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Messages
+              {t("admin.channels.columns.messages")}
             </th>
             <th className="border-b border-slate-700 pb-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Actions
+              {t("admin.channels.columns.actions")}
             </th>
           </tr>
         </thead>
@@ -370,7 +398,31 @@ function ChannelsTab({ orgId, token }: { orgId: string; token: string }) {
           {channels.map((ch) => (
             <tr key={ch.id} className="border-b border-slate-700">
               <td className="py-3 pr-4 text-sm font-medium">
-                {ch.isPrivate && <span className="mr-1">🔒</span>}#{ch.name}
+                {editingChannel?.id === ch.id ? (
+                  <div className="flex items-center gap-1">
+                    <EmojiPickerButton value={editingIcon} onChange={setEditingIcon} />
+                    <input
+                      autoFocus
+                      value={editingName}
+                      onChange={(e) => setEditingName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleRename();
+                        if (e.key === "Escape") { setEditingChannel(null); setEditingName(""); setEditingIcon(""); }
+                      }}
+                      className="rounded border border-blue-500 bg-slate-700 px-2 py-0.5 text-sm text-white focus:outline-none w-36"
+                    />
+                    <button onClick={handleRename} className="text-xs text-green-400 hover:text-green-300">{t("admin.channels.save")}</button>
+                    <button onClick={() => { setEditingChannel(null); setEditingName(""); setEditingIcon(""); }} className="text-xs text-slate-400 hover:text-slate-300">✕</button>
+                  </div>
+                ) : (
+                  <span
+                    className="cursor-pointer hover:text-blue-400"
+                    onClick={() => { setEditingChannel(ch); setEditingName(ch.name); setEditingIcon(ch.icon ?? ""); }}
+                    title={t("admin.channels.clickToEdit")}
+                  >
+                    {ch.icon ? <span className="mr-1">{ch.icon}</span> : (ch.isPrivate ? <span className="mr-1">🔒</span> : null)}#{ch.name}
+                  </span>
+                )}
               </td>
               <td className="py-3 pr-4">
                 <span
@@ -392,13 +444,13 @@ function ChannelsTab({ orgId, token }: { orgId: string; token: string }) {
                   onClick={() => setManagingChannel(ch)}
                   className="rounded px-2 py-1 text-xs text-blue-400 hover:bg-blue-900/30"
                 >
-                  成員
+                  {t("admin.channels.members")}
                 </button>
                 <button
                   onClick={() => handleDelete(ch)}
                   className="rounded px-2 py-1 text-xs text-red-400 hover:bg-red-900/30"
                 >
-                  Delete
+                  {t("admin.channels.delete")}
                 </button>
               </td>
             </tr>
@@ -437,6 +489,7 @@ interface OrgMemberOption {
 function ChannelMembersPanel({
   orgId, channel, token, onClose,
 }: { orgId: string; channel: ChannelRow; token: string; onClose: () => void }) {
+  const { t } = useTranslation();
   const [members, setMembers] = useState<ChannelMemberRow[]>([]);
   const [orgMembers, setOrgMembers] = useState<OrgMemberOption[]>([]);
   const [selectedUserId, setSelectedUserId] = useState("");
@@ -481,7 +534,7 @@ function ChannelMembersPanel({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="w-full max-w-md rounded-xl bg-slate-800 p-6 shadow-2xl">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="font-bold">#{channel.name} 成員管理</h3>
+          <h3 className="font-bold">{t("admin.channels.membersPanel.title", { name: channel.name })}</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-white">✕</button>
         </div>
 
@@ -492,7 +545,7 @@ function ChannelMembersPanel({
             onChange={(e) => setSelectedUserId(e.target.value)}
             className="flex-1 rounded border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white"
           >
-            <option value="">選擇要加入的成員</option>
+            <option value="">{t("admin.channels.membersPanel.selectMember")}</option>
             {addableUsers.map((m) => (
               <option key={m.user.id} value={m.user.id}>
                 {m.user.name} ({m.user.email})
@@ -504,15 +557,15 @@ function ChannelMembersPanel({
             disabled={!selectedUserId}
             className="rounded bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
           >
-            加入
+            {t("admin.channels.membersPanel.add")}
           </button>
         </div>
 
         {/* Member list */}
         {loading ? (
-          <div className="text-sm text-slate-400">載入中...</div>
+          <div className="text-sm text-slate-400">Loading...</div>
         ) : members.length === 0 ? (
-          <div className="text-sm text-slate-400">目前沒有成員</div>
+          <div className="text-sm text-slate-400">{t("admin.channels.membersPanel.noMembers")}</div>
         ) : (
           <ul className="space-y-2">
             {members.map((m) => (
@@ -525,7 +578,7 @@ function ChannelMembersPanel({
                   onClick={() => removeMember(m.user.id)}
                   className="text-xs text-red-400 hover:text-red-300"
                 >
-                  移除
+                  {t("admin.channels.membersPanel.remove")}
                 </button>
               </li>
             ))}
@@ -541,6 +594,7 @@ function ChannelMembersPanel({
 // ============================================================
 
 function SettingsTab({ orgId, token }: { orgId: string; token: string }) {
+  const { t } = useTranslation();
   const [retainDays, setRetainDays] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -556,7 +610,7 @@ function SettingsTab({ orgId, token }: { orgId: string; token: string }) {
           setRetainDays(data.data.messageRetainDays != null ? String(data.data.messageRetainDays) : "");
         }
       })
-      .catch(() => setMessage({ type: "error", text: "Failed to load settings" }))
+      .catch(() => setMessage({ type: "error", text: t("admin.settings.errors.load") }))
       .finally(() => setLoading(false));
   }, [orgId]);
 
@@ -573,12 +627,12 @@ function SettingsTab({ orgId, token }: { orgId: string; token: string }) {
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        setMessage({ type: "success", text: "Settings saved successfully." });
+        setMessage({ type: "success", text: t("admin.settings.saved") });
       } else {
-        setMessage({ type: "error", text: data.error || "Failed to save" });
+        setMessage({ type: "error", text: data.error || t("admin.settings.errors.save") });
       }
     } catch {
-      setMessage({ type: "error", text: "Failed to save settings" });
+      setMessage({ type: "error", text: t("admin.settings.errors.save") });
     } finally {
       setSaving(false);
     }
@@ -588,7 +642,7 @@ function SettingsTab({ orgId, token }: { orgId: string; token: string }) {
 
   return (
     <div>
-      <h2 className="mb-4 text-xl font-bold">Settings</h2>
+      <h2 className="mb-4 text-xl font-bold">{t("admin.settings.title")}</h2>
 
       {message && (
         <div
@@ -603,18 +657,20 @@ function SettingsTab({ orgId, token }: { orgId: string; token: string }) {
       <form onSubmit={handleSave} className="max-w-md space-y-4">
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-300">
-            Message Retention (days)
+            {t("admin.settings.messageRetention")}
           </label>
           <input
             type="number"
-            placeholder="Leave empty for forever"
+            placeholder={t("admin.settings.retentionPlaceholder")}
             value={retainDays}
             onChange={(e) => setRetainDays(e.target.value)}
             min={1}
             className="w-full rounded border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white placeholder-slate-400"
           />
           <p className="mt-1 text-xs text-slate-400">
-            Current value: {retainDays ? `${retainDays} days` : "Forever (no expiry)"}
+            {retainDays
+              ? t("admin.settings.currentRetention", { days: retainDays })
+              : t("admin.settings.forever")}
           </p>
         </div>
         <button
@@ -622,7 +678,7 @@ function SettingsTab({ orgId, token }: { orgId: string; token: string }) {
           disabled={saving}
           className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
         >
-          {saving ? "Saving..." : "Save"}
+          {saving ? t("admin.settings.saving") : t("admin.settings.save")}
         </button>
       </form>
     </div>
@@ -659,6 +715,7 @@ const AUDIT_ACTIONS = [
 ];
 
 function AuditLogsTab({ orgId, token }: { orgId: string; token: string }) {
+  const { t } = useTranslation();
   const [logs, setLogs] = useState<AuditLogRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionFilter, setActionFilter] = useState("");
@@ -684,7 +741,7 @@ function AuditLogsTab({ orgId, token }: { orgId: string; token: string }) {
         setNextCursor(data.nextCursor);
       }
     } catch {
-      setError("Failed to load audit logs");
+      setError(t("admin.auditLogs.errors.load"));
     } finally {
       setLoading(false);
     }
@@ -707,7 +764,7 @@ function AuditLogsTab({ orgId, token }: { orgId: string; token: string }) {
 
   return (
     <div>
-      <h2 className="mb-4 text-xl font-bold">Audit Logs</h2>
+      <h2 className="mb-4 text-xl font-bold">{t("admin.auditLogs.title")}</h2>
 
       {error && (
         <div className="mb-4 rounded bg-red-900/50 px-4 py-2 text-sm text-red-300">{error}</div>
@@ -720,7 +777,7 @@ function AuditLogsTab({ orgId, token }: { orgId: string; token: string }) {
           onChange={(e) => setActionFilter(e.target.value)}
           className="rounded border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white"
         >
-          <option value="">All actions</option>
+          <option value="">{t("admin.auditLogs.allActions")}</option>
           {AUDIT_ACTIONS.map((a) => (
             <option key={a} value={a}>
               {a}
@@ -731,31 +788,31 @@ function AuditLogsTab({ orgId, token }: { orgId: string; token: string }) {
           type="submit"
           className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
         >
-          Filter
+          {t("admin.auditLogs.filter")}
         </button>
       </form>
 
       {loading && logs.length === 0 ? (
-        <div className="text-slate-400">Loading...</div>
+        <div className="text-slate-400">{t("admin.auditLogs.loading")}</div>
       ) : (
         <>
           <table className="w-full border-collapse text-sm">
             <thead>
               <tr>
                 <th className="border-b border-slate-700 pb-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Date
+                  {t("admin.auditLogs.columns.date")}
                 </th>
                 <th className="border-b border-slate-700 pb-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Actor
+                  {t("admin.auditLogs.columns.actor")}
                 </th>
                 <th className="border-b border-slate-700 pb-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Action
+                  {t("admin.auditLogs.columns.action")}
                 </th>
                 <th className="border-b border-slate-700 pb-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Target
+                  {t("admin.auditLogs.columns.target")}
                 </th>
                 <th className="border-b border-slate-700 pb-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Meta
+                  {t("admin.auditLogs.columns.meta")}
                 </th>
               </tr>
             </thead>
@@ -805,7 +862,7 @@ function AuditLogsTab({ orgId, token }: { orgId: string; token: string }) {
               disabled={loading}
               className="mt-4 rounded bg-slate-700 px-4 py-2 text-sm text-slate-300 hover:bg-slate-600 disabled:opacity-50"
             >
-              {loading ? "Loading..." : "Load More"}
+              {loading ? t("admin.auditLogs.loading") : t("admin.auditLogs.loadMore")}
             </button>
           )}
         </>
@@ -829,6 +886,7 @@ interface IntegrationRow {
 }
 
 function IntegrationsTab({ orgId, token }: { orgId: string; token: string }) {
+  const { t } = useTranslation();
   const [integrations, setIntegrations] = useState<IntegrationRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState("");
@@ -846,7 +904,7 @@ function IntegrationsTab({ orgId, token }: { orgId: string; token: string }) {
       const data = await res.json();
       if (data.success) setIntegrations(data.data);
     } catch {
-      setError("Failed to load integrations");
+      setError(t("admin.integrations.errors.load"));
     } finally {
       setLoading(false);
     }
@@ -873,7 +931,7 @@ function IntegrationsTab({ orgId, token }: { orgId: string; token: string }) {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Failed to create integration");
+        setError(data.error || t("admin.integrations.errors.create"));
       } else {
         setPlainKey(data.data.plainKey);
         setNewName("");
@@ -882,7 +940,7 @@ function IntegrationsTab({ orgId, token }: { orgId: string; token: string }) {
         await fetchIntegrations();
       }
     } catch {
-      setError("Failed to create integration");
+      setError(t("admin.integrations.errors.create"));
     } finally {
       setCreating(false);
     }
@@ -897,12 +955,12 @@ function IntegrationsTab({ orgId, token }: { orgId: string; token: string }) {
       });
       await fetchIntegrations();
     } catch {
-      setError("Failed to update integration");
+      setError(t("admin.integrations.errors.update"));
     }
   };
 
   const handleDelete = async (integration: IntegrationRow) => {
-    if (!confirm(`Delete integration "${integration.name}"?`)) return;
+    if (!confirm(t("admin.integrations.deleteConfirm", { name: integration.name }))) return;
     try {
       await fetch(`/api/admin/${orgId}/integrations/${integration.id}`, {
         method: "DELETE",
@@ -910,7 +968,7 @@ function IntegrationsTab({ orgId, token }: { orgId: string; token: string }) {
       });
       await fetchIntegrations();
     } catch {
-      setError("Failed to delete integration");
+      setError(t("admin.integrations.errors.delete"));
     }
   };
 
@@ -918,7 +976,7 @@ function IntegrationsTab({ orgId, token }: { orgId: string; token: string }) {
 
   return (
     <div>
-      <h2 className="mb-4 text-xl font-bold">Integrations</h2>
+      <h2 className="mb-4 text-xl font-bold">{t("admin.integrations.title")}</h2>
 
       {error && (
         <div className="mb-4 rounded bg-red-900/50 px-4 py-2 text-sm text-red-300">{error}</div>
@@ -928,9 +986,9 @@ function IntegrationsTab({ orgId, token }: { orgId: string; token: string }) {
       {plainKey && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
           <div className="w-full max-w-md rounded-lg bg-slate-800 p-6 shadow-xl">
-            <h3 className="mb-2 text-lg font-bold text-white">API Key Created</h3>
+            <h3 className="mb-2 text-lg font-bold text-white">{t("admin.integrations.apiKeyCreated")}</h3>
             <p className="mb-3 text-sm text-yellow-400">
-              This key will only be shown once. Copy it now and store it securely.
+              {t("admin.integrations.apiKeyWarning")}
             </p>
             <div className="mb-4 rounded bg-slate-900 px-3 py-2 font-mono text-sm text-green-300 break-all">
               {plainKey}
@@ -939,7 +997,7 @@ function IntegrationsTab({ orgId, token }: { orgId: string; token: string }) {
               onClick={() => setPlainKey(null)}
               className="w-full rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
             >
-              I have copied the key
+              {t("admin.integrations.apiKeyCopied")}
             </button>
           </div>
         </div>
@@ -950,7 +1008,7 @@ function IntegrationsTab({ orgId, token }: { orgId: string; token: string }) {
         <div className="flex flex-wrap gap-2">
           <input
             type="text"
-            placeholder="Integration name"
+            placeholder={t("admin.integrations.namePlaceholder")}
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             className="flex-1 rounded border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white placeholder-slate-400"
@@ -958,14 +1016,14 @@ function IntegrationsTab({ orgId, token }: { orgId: string; token: string }) {
           />
           <input
             type="text"
-            placeholder="Description (optional)"
+            placeholder={t("admin.integrations.descriptionPlaceholder")}
             value={newDesc}
             onChange={(e) => setNewDesc(e.target.value)}
             className="flex-1 rounded border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white placeholder-slate-400"
           />
           <input
             type="url"
-            placeholder="Webhook URL (optional)"
+            placeholder={t("admin.integrations.webhookPlaceholder")}
             value={newWebhook}
             onChange={(e) => setNewWebhook(e.target.value)}
             className="flex-1 rounded border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white placeholder-slate-400"
@@ -975,7 +1033,7 @@ function IntegrationsTab({ orgId, token }: { orgId: string; token: string }) {
             disabled={creating}
             className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
           >
-            {creating ? "Creating..." : "Create"}
+            {creating ? t("admin.integrations.creating") : t("admin.integrations.create")}
           </button>
         </div>
       </form>
@@ -985,19 +1043,19 @@ function IntegrationsTab({ orgId, token }: { orgId: string; token: string }) {
         <thead>
           <tr>
             <th className="border-b border-slate-700 pb-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Name
+              {t("admin.integrations.columns.name")}
             </th>
             <th className="border-b border-slate-700 pb-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Description
+              {t("admin.integrations.columns.description")}
             </th>
             <th className="border-b border-slate-700 pb-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Active
+              {t("admin.integrations.columns.active")}
             </th>
             <th className="border-b border-slate-700 pb-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Created
+              {t("admin.integrations.columns.created")}
             </th>
             <th className="border-b border-slate-700 pb-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Actions
+              {t("admin.integrations.columns.actions")}
             </th>
           </tr>
         </thead>
@@ -1022,7 +1080,7 @@ function IntegrationsTab({ orgId, token }: { orgId: string; token: string }) {
                   onClick={() => handleDelete(int)}
                   className="rounded px-2 py-1 text-xs text-red-400 hover:bg-red-900/30"
                 >
-                  Delete
+                  {t("admin.integrations.delete")}
                 </button>
               </td>
             </tr>
@@ -1038,6 +1096,7 @@ function IntegrationsTab({ orgId, token }: { orgId: string; token: string }) {
 // ============================================================
 
 function SetupOrgPrompt({ token, onCreated }: { token: string; onCreated: (id: string) => void }) {
+  const { t } = useTranslation();
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [error, setError] = useState("");
@@ -1056,10 +1115,10 @@ function SetupOrgPrompt({ token, onCreated }: { token: string; onCreated: (id: s
       if (data.success) {
         onCreated(data.data.id);
       } else {
-        setError(data.error || "Failed to create organization");
+        setError(data.error || t("admin.setup.create"));
       }
     } catch {
-      setError("Failed to create organization");
+      setError(t("admin.setup.create"));
     } finally {
       setLoading(false);
     }
@@ -1068,18 +1127,18 @@ function SetupOrgPrompt({ token, onCreated }: { token: string; onCreated: (id: s
   return (
     <div className="flex h-screen items-center justify-center bg-slate-900 text-white">
       <div className="w-full max-w-sm rounded-2xl bg-slate-800 p-8 shadow-xl">
-        <h2 className="mb-2 text-xl font-bold">建立組織</h2>
-        <p className="mb-6 text-sm text-slate-400">尚未建立任何組織，請先建立一個。</p>
+        <h2 className="mb-2 text-xl font-bold">{t("admin.setup.title")}</h2>
+        <p className="mb-6 text-sm text-slate-400">{t("admin.setup.description")}</p>
         <input
           value={name}
           onChange={(e) => { setName(e.target.value); setSlug(e.target.value.toLowerCase().replace(/\s+/g, "-")); }}
-          placeholder="組織名稱"
+          placeholder={t("admin.setup.namePlaceholder")}
           className="mb-3 w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
         />
         <input
           value={slug}
           onChange={(e) => setSlug(e.target.value)}
-          placeholder="Slug（英文小寫、連字符）"
+          placeholder={t("admin.setup.slugPlaceholder")}
           className="mb-4 w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
         />
         {error && <p className="mb-3 text-xs text-red-400">{error}</p>}
@@ -1088,9 +1147,242 @@ function SetupOrgPrompt({ token, onCreated }: { token: string; onCreated: (id: s
           disabled={loading || !name || !slug}
           className="w-full rounded-lg bg-blue-600 px-4 py-2 font-medium text-white transition hover:bg-blue-500 disabled:opacity-50"
         >
-          {loading ? "建立中..." : "建立組織"}
+          {loading ? t("admin.setup.creating") : t("admin.setup.create")}
         </button>
       </div>
+    </div>
+  );
+}
+
+// ============================================================
+// LocalUsersTab
+// ============================================================
+
+interface LocalUserRow {
+  id: string;
+  email: string;
+  name: string;
+  isDisabled: boolean;
+  isSuperAdmin: boolean;
+  createdAt: string;
+}
+
+function LocalUsersTab({ token, currentUser }: { token: string; currentUser: UserProfile }) {
+  const { t } = useTranslation();
+  const [users, setUsers] = useState<LocalUserRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+
+  const fetchUsers = async () => {
+    try {
+      const res = await fetch("/api/system/local-users", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.success) setUsers(data.data);
+    } catch {
+      setError(t("admin.localAccounts.errors.load"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchUsers(); }, []);
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email || !name || !password) return;
+    setCreating(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/system/local-users", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ email, name, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || t("admin.localAccounts.errors.create"));
+      } else {
+        setEmail(""); setName(""); setPassword("");
+        await fetchUsers();
+      }
+    } catch {
+      setError(t("admin.localAccounts.errors.create"));
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleToggleDisabled = async (u: LocalUserRow) => {
+    try {
+      await fetch(`/api/system/local-users/${u.id}`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ isDisabled: !u.isDisabled }),
+      });
+      await fetchUsers();
+    } catch {
+      setError(t("admin.localAccounts.errors.update"));
+    }
+  };
+
+  const handleSetPassword = async (id: string) => {
+    if (!newPassword) return;
+    try {
+      const res = await fetch(`/api/system/local-users/${id}`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ password: newPassword }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        setError(d.error || t("admin.localAccounts.errors.updatePassword"));
+      } else {
+        setEditingId(null);
+        setNewPassword("");
+      }
+    } catch {
+      setError(t("admin.localAccounts.errors.updatePassword"));
+    }
+  };
+
+  const handleDelete = async (u: LocalUserRow) => {
+    if (!confirm(t("admin.localAccounts.deleteConfirm", { name: u.name, email: u.email }))) return;
+    try {
+      const res = await fetch(`/api/system/local-users/${u.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        setError(d.error || t("admin.localAccounts.errors.delete"));
+      } else {
+        await fetchUsers();
+      }
+    } catch {
+      setError(t("admin.localAccounts.errors.delete"));
+    }
+  };
+
+  if (loading) return <div className="text-slate-400">Loading...</div>;
+
+  return (
+    <div>
+      <h2 className="mb-4 text-xl font-bold">{t("admin.localAccounts.title")}</h2>
+      <p className="mb-6 text-sm text-slate-400">
+        {t("admin.localAccounts.description")}
+      </p>
+
+      {error && (
+        <div className="mb-4 rounded bg-red-900/50 px-4 py-2 text-sm text-red-300">{error}</div>
+      )}
+
+      {/* Create form */}
+      <form onSubmit={handleCreate} className="mb-6 flex flex-wrap gap-2">
+        <input
+          type="email" placeholder={t("admin.users.emailPlaceholder")} value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="rounded border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white placeholder-slate-400"
+          required
+        />
+        <input
+          type="text" placeholder={t("admin.localAccounts.displayNamePlaceholder")} value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="rounded border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white placeholder-slate-400"
+          required
+        />
+        <input
+          type="password" placeholder={t("admin.localAccounts.passwordPlaceholder")} value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          className="rounded border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white placeholder-slate-400"
+          required
+        />
+        <button
+          type="submit" disabled={creating}
+          className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          {creating ? t("admin.localAccounts.creating") : t("admin.localAccounts.create")}
+        </button>
+      </form>
+
+      {/* Users table */}
+      <table className="w-full border-collapse text-sm">
+        <thead>
+          <tr>
+            {[
+              t("admin.localAccounts.columns.nameEmail"),
+              t("admin.localAccounts.columns.role"),
+              t("admin.localAccounts.columns.disabled"),
+              t("admin.localAccounts.columns.actions"),
+            ].map((h) => (
+              <th key={h} className="border-b border-slate-700 pb-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {users.map((u) => (
+            <tr key={u.id} className="border-b border-slate-700">
+              <td className="py-3 pr-4">
+                <p className="font-medium">{u.name}</p>
+                <p className="text-xs text-slate-400">{u.email}</p>
+              </td>
+              <td className="py-3 pr-4">
+                <span className={`rounded px-2 py-0.5 text-xs font-medium ${u.isSuperAdmin ? "bg-purple-900 text-purple-300" : "bg-slate-700 text-slate-300"}`}>
+                  {u.isSuperAdmin ? t("admin.localAccounts.roles.superAdmin") : t("admin.localAccounts.roles.user")}
+                </span>
+              </td>
+              <td className="py-3 pr-4">
+                {u.id !== currentUser.id && (
+                  <input
+                    type="checkbox" checked={u.isDisabled}
+                    onChange={() => handleToggleDisabled(u)}
+                    className="h-4 w-4 cursor-pointer accent-blue-500"
+                  />
+                )}
+              </td>
+              <td className="py-3">
+                <div className="flex items-center gap-2">
+                  {editingId === u.id ? (
+                    <>
+                      <input
+                        type="password" placeholder={t("admin.localAccounts.newPasswordPlaceholder")} value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        className="rounded border border-slate-600 bg-slate-700 px-2 py-1 text-xs text-white placeholder-slate-400"
+                      />
+                      <button onClick={() => handleSetPassword(u.id)}
+                        className="rounded px-2 py-1 text-xs text-green-400 hover:bg-green-900/30">{t("admin.localAccounts.save")}</button>
+                      <button onClick={() => { setEditingId(null); setNewPassword(""); }}
+                        className="rounded px-2 py-1 text-xs text-slate-400 hover:bg-slate-700">{t("admin.localAccounts.cancel")}</button>
+                    </>
+                  ) : (
+                    <>
+                      <button onClick={() => setEditingId(u.id)}
+                        className="rounded px-2 py-1 text-xs text-slate-400 hover:bg-slate-700">
+                        {t("admin.localAccounts.changePassword")}
+                      </button>
+                      {!u.isSuperAdmin && u.id !== currentUser.id && (
+                        <button onClick={() => handleDelete(u)}
+                          className="rounded px-2 py-1 text-xs text-red-400 hover:bg-red-900/30">
+                          {t("admin.localAccounts.delete")}
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -1100,6 +1392,7 @@ function SetupOrgPrompt({ token, onCreated }: { token: string; onCreated: (id: s
 // ============================================================
 
 export function AdminPage({ user, token, onLogout }: AdminPageProps) {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<AdminTab>("users");
   const [orgId, setOrgId] = useState<string | null>(null);
   const [checking, setChecking] = useState(true);
@@ -1121,7 +1414,7 @@ export function AdminPage({ user, token, onLogout }: AdminPageProps) {
   if (checking) {
     return (
       <div className="flex h-screen items-center justify-center bg-slate-900 text-white">
-        <div className="animate-pulse text-lg">Checking access...</div>
+        <div className="animate-pulse text-lg">{t("admin.checkingAccess")}</div>
       </div>
     );
   }
@@ -1131,11 +1424,12 @@ export function AdminPage({ user, token, onLogout }: AdminPageProps) {
   }
 
   const tabs: { id: AdminTab; label: string }[] = [
-    { id: "users", label: "Users" },
-    { id: "channels", label: "Channels" },
-    { id: "settings", label: "Settings" },
-    { id: "audit-logs", label: "Audit Logs" },
-    { id: "integrations", label: "Integrations" },
+    { id: "users", label: t("admin.tabs.users") },
+    { id: "channels", label: t("admin.tabs.channels") },
+    { id: "settings", label: t("admin.tabs.settings") },
+    { id: "audit-logs", label: t("admin.tabs.auditLogs") },
+    { id: "integrations", label: t("admin.tabs.integrations") },
+    { id: "local-users", label: t("admin.tabs.localAccounts") },
   ];
 
   return (
@@ -1144,7 +1438,7 @@ export function AdminPage({ user, token, onLogout }: AdminPageProps) {
       <aside className="flex w-52 flex-shrink-0 flex-col border-r border-slate-700 bg-slate-800">
         {/* Header */}
         <div className="border-b border-slate-700 p-4">
-          <h1 className="text-base font-bold text-white">Admin Panel</h1>
+          <h1 className="text-base font-bold text-white">{t("admin.panel")}</h1>
           <p className="mt-0.5 truncate text-xs text-slate-400">{user.email}</p>
         </div>
 
@@ -1171,13 +1465,13 @@ export function AdminPage({ user, token, onLogout }: AdminPageProps) {
             href="/"
             className="block w-full rounded px-3 py-2 text-left text-sm text-slate-400 transition hover:bg-slate-700 hover:text-white"
           >
-            ← Back to Chat
+            {t("admin.backToChat")}
           </a>
           <button
             onClick={onLogout}
             className="w-full rounded px-3 py-2 text-left text-sm text-slate-400 transition hover:bg-slate-700 hover:text-white"
           >
-            Logout
+            {t("admin.logout")}
           </button>
         </div>
       </aside>
@@ -1198,6 +1492,9 @@ export function AdminPage({ user, token, onLogout }: AdminPageProps) {
         )}
         {activeTab === "integrations" && (
           <IntegrationsTab orgId={orgId} token={token} />
+        )}
+        {activeTab === "local-users" && (
+          <LocalUsersTab token={token} currentUser={user} />
         )}
       </main>
     </div>

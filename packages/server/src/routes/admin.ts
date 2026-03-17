@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma";
 import { authMiddleware, orgAdminMiddleware } from "../auth/middleware";
 import { writeAuditLog } from "../audit/log";
 import { createHash, randomBytes } from "crypto";
+import { publishToChannel } from "../ws/pubsub";
 
 export const adminRoutes = new Hono();
 
@@ -99,6 +100,15 @@ adminRoutes.delete("/:orgId/users/:userId", async (c) => {
     return c.json({ error: "Cannot remove yourself" }, 400);
   }
 
+  // Remove from all channels in this org first
+  const orgChannels = await prisma.channel.findMany({
+    where: { orgId },
+    select: { id: true },
+  });
+  await prisma.channelMember.deleteMany({
+    where: { userId, channelId: { in: orgChannels.map((c) => c.id) } },
+  });
+
   await prisma.orgMember.delete({
     where: { userId_orgId: { userId, orgId } },
   });
@@ -122,7 +132,7 @@ adminRoutes.get("/:orgId/channels", async (c) => {
   const orgId = c.req.param("orgId");
 
   const channels = await prisma.channel.findMany({
-    where: { orgId },
+    where: { orgId, type: { not: "dm" } },
     include: {
       _count: {
         select: { members: true, messages: true },
@@ -189,7 +199,7 @@ adminRoutes.patch("/:orgId/channels/:channelId", async (c) => {
   const actorId = c.get("userId");
   const orgId = c.req.param("orgId");
   const channelId = c.req.param("channelId");
-  const body = await c.req.json<{ name?: string; type?: string; isPrivate?: boolean }>();
+  const body = await c.req.json<{ name?: string; type?: string; isPrivate?: boolean; icon?: string | null }>();
 
   const channel = await prisma.channel.update({
     where: { id: channelId },
@@ -197,6 +207,7 @@ adminRoutes.patch("/:orgId/channels/:channelId", async (c) => {
       ...(body.name !== undefined && { name: body.name }),
       ...(body.type !== undefined && { type: body.type }),
       ...(body.isPrivate !== undefined && { isPrivate: body.isPrivate }),
+      ...(body.icon !== undefined && { icon: body.icon }),
     },
   });
 
@@ -207,6 +218,12 @@ adminRoutes.patch("/:orgId/channels/:channelId", async (c) => {
     targetId: channelId,
     meta: body as Record<string, unknown>,
   });
+
+  // Broadcast to all channel subscribers so their sidebars update in real time
+  await publishToChannel(
+    channelId,
+    JSON.stringify({ type: "channel:updated", channelId, name: channel.name, icon: channel.icon })
+  );
 
   return c.json({ success: true, data: channel });
 });

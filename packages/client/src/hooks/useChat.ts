@@ -89,6 +89,14 @@ export function useChat(token: string | null, activeChannelId: string | null) {
         sendRef.current({ type: "channel:join", channelId: event.channelId });
         window.dispatchEvent(new CustomEvent("xeku:channel-joined", { detail: { channelId: event.channelId } }));
         break;
+
+      case "channel:updated":
+        window.dispatchEvent(
+          new CustomEvent("xeku:channel-updated", {
+            detail: { channelId: event.channelId, name: event.name, icon: event.icon },
+          })
+        );
+        break;
     }
   }, []);
 

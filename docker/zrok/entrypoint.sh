@@ -1,18 +1,21 @@
 #!/bin/sh
 set -e
 
-ZROK_CFG="$HOME/.zrok/environment.json"
+# Always set the correct API endpoint before any zrok command
+ZROK_ENDPOINT="${ZROK_API_ENDPOINT:-https://api.zrok.io}"
+echo "[zrok] API endpoint: $ZROK_ENDPOINT"
+zrok config set apiEndpoint "$ZROK_ENDPOINT"
 
-# Enable zrok environment if not already enrolled
-if [ ! -f "$ZROK_CFG" ]; then
+# Auto-enable on first run (no environment.json means not yet enabled)
+if [ ! -f /zrok/.zrok/environment.json ]; then
   if [ -z "$ZROK_ENABLE_TOKEN" ]; then
-    echo "[zrok] ERROR: ZROK_ENABLE_TOKEN is not set."
-    echo "[zrok] Get a free token at https://zrok.io and set it in .env"
+    echo "[zrok] ERROR: ZROK_ENABLE_TOKEN is not set in .env"
     exit 1
   fi
-  echo "[zrok] Enabling environment with provided token..."
+  echo "[zrok] First run — enabling environment..."
   zrok enable "$ZROK_ENABLE_TOKEN"
+  echo "[zrok] Environment enabled."
 fi
 
-echo "[zrok] Starting public share → $ZROK_TARGET"
-exec zrok share public --headless "$ZROK_TARGET"
+echo "[zrok] Starting tunnel → http://caddy-dev:80"
+exec zrok share public --headless http://caddy-dev:80

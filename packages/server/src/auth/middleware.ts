@@ -28,6 +28,16 @@ export async function authMiddleware(c: Context, next: Next) {
   }
 }
 
+// Super admin middleware — checks if user has isSuperAdmin flag
+export async function superAdminMiddleware(c: Context, next: Next) {
+  const userId = c.get("userId");
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { isSuperAdmin: true } });
+  if (!user?.isSuperAdmin) {
+    return c.json({ error: "Super admin access required" }, 403);
+  }
+  await next();
+}
+
 // Org admin middleware — checks if user is admin of the org
 export async function orgAdminMiddleware(c: Context, next: Next) {
   const userId = c.get("userId");

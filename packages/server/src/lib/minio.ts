@@ -2,6 +2,7 @@ import {
   S3Client,
   PutObjectCommand,
   GetObjectCommand,
+  DeleteObjectCommand,
   CreateBucketCommand,
   HeadBucketCommand,
   PutBucketPolicyCommand,
@@ -35,7 +36,12 @@ export async function uploadFile(
     })
   );
 
-  return `${endpoint}/${bucket}/${key}`;
+  const publicBase = process.env.MINIO_PUBLIC_URL;
+  return publicBase ? `${publicBase}/${key}` : `${endpoint}/${bucket}/${key}`;
+}
+
+export async function deleteFile(key: string): Promise<void> {
+  await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
 }
 
 export async function getPresignedUrl(key: string, expiresIn = 3600): Promise<string> {

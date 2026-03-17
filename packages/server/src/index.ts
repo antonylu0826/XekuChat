@@ -15,6 +15,7 @@ import { previewRoutes } from "./routes/preview";
 import { adminRoutes } from "./routes/admin";
 import { userRoutes } from "./routes/user";
 import { pushRoutes } from "./routes/push";
+import { systemRoutes } from "./routes/system";
 import { redis, redisSub } from "./lib/redis";
 import { prisma } from "./lib/prisma";
 import { verifyAccessToken } from "./auth/jwt";
@@ -55,12 +56,38 @@ app.route("/api/preview", previewRoutes);
 app.route("/api/admin", adminRoutes);
 app.route("/api/users", userRoutes);
 app.route("/api/push", pushRoutes);
+app.route("/api/system", systemRoutes);
 
 // ---- Initialize services ----
 initPubSub();
 startHeartbeat();
 startPresenceBatching();
 ensureBucket().catch((err) => console.warn("MinIO bucket init:", err.message));
+initSuperAdminLocalAccount().catch((err) => console.warn("Super admin init:", err.message));
+
+// ---- Super admin local account init ----
+async function initSuperAdminLocalAccount() {
+  const email = process.env.SUPER_ADMIN_EMAIL;
+  const password = process.env.SUPER_ADMIN_PASSWORD;
+  if (!email || !password) return;
+
+  const existing = await prisma.user.findUnique({ where: { email }, select: { passwordHash: true, isSuperAdmin: true } });
+
+  // Skip rehashing if password hasn't changed
+  if (existing?.passwordHash && await Bun.password.verify(password, existing.passwordHash)) {
+    if (!existing.isSuperAdmin) await prisma.user.update({ where: { email }, data: { isSuperAdmin: true } });
+    console.log(`Super admin local account ready: ${email}`);
+    return;
+  }
+
+  const passwordHash = await Bun.password.hash(password);
+  await prisma.user.upsert({
+    where: { email },
+    update: { passwordHash, isSuperAdmin: true },
+    create: { email, name: email.split("@")[0], provider: "local", isSuperAdmin: true, passwordHash },
+  });
+  console.log(`Super admin local account ready: ${email}`);
+}
 
 // ---- Graceful shutdown ----
 async function shutdown() {

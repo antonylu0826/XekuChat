@@ -3,7 +3,7 @@ import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { prisma } from "../lib/prisma";
 import { createTokens, verifyAccessToken, verifyRefreshToken } from "../auth/jwt";
 import { getOIDCAuthUrl, exchangeCode, getUserInfo } from "../auth/oidc";
-import { writeAuditLog } from "../audit/log";
+import { autoJoinOrgs } from "../lib/autoJoinOrgs";
 
 export const authRoutes = new Hono();
 
@@ -62,8 +62,10 @@ authRoutes.get("/callback", async (c) => {
       maxAge: 7 * 24 * 60 * 60, // 7 days
     });
 
-    // Redirect to app with access token
-    const appUrl = process.env.APP_URL || "http://localhost:5173";
+    // Redirect to app with access token.
+    // In tunnel/zrok dev, APP_PUBLIC_URL overrides APP_URL so the browser
+    // lands on the public URL instead of localhost.
+    const appUrl = process.env.APP_PUBLIC_URL || process.env.APP_URL || "http://localhost:5173";
     return c.redirect(`${appUrl}?token=${accessToken}`);
   } catch (err) {
     console.error("Auth callback error:", err);
@@ -184,36 +186,51 @@ authRoutes.post("/test-login", async (c) => {
   });
 });
 
+// Auth configuration — tells the client which login methods are available
+authRoutes.get("/config", (c) => {
+  return c.json({
+    oidcEnabled: process.env.OIDC_ENABLED !== "false",
+  });
+});
+
+// Local email/password login
+authRoutes.post("/local-login", async (c) => {
+  const { email, password } = await c.req.json<{ email: string; password: string }>();
+  if (!email || !password) {
+    return c.json({ error: "email and password are required" }, 400);
+  }
+
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user || !user.passwordHash) {
+    return c.json({ error: "Invalid credentials" }, 401);
+  }
+  if (user.isDisabled) {
+    return c.json({ error: "Account disabled" }, 403);
+  }
+
+  const valid = await Bun.password.verify(password, user.passwordHash);
+  if (!valid) {
+    return c.json({ error: "Invalid credentials" }, 401);
+  }
+
+  await autoJoinOrgs(user.id);
+
+  const { accessToken, refreshToken } = await createTokens(user.id);
+
+  setCookie(c, "refresh_token", refreshToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "Lax",
+    path: "/auth",
+    maxAge: 7 * 24 * 60 * 60,
+  });
+
+  return c.json({ success: true, data: { accessToken } });
+});
+
 // Logout
 authRoutes.post("/logout", (c) => {
   deleteCookie(c, "refresh_token", { path: "/auth" });
   return c.json({ success: true });
 });
 
-// ============================================================
-// Auto-join helper: adds user to all orgs and their public channels
-// ============================================================
-async function autoJoinOrgs(userId: string) {
-  const orgs = await prisma.organization.findMany({ select: { id: true } });
-
-  for (const org of orgs) {
-    await prisma.orgMember.upsert({
-      where: { userId_orgId: { userId, orgId: org.id } },
-      update: {},
-      create: { userId, orgId: org.id, role: "member" },
-    });
-
-    const publicChannels = await prisma.channel.findMany({
-      where: { orgId: org.id, isPrivate: false, type: { not: "dm" } },
-      select: { id: true },
-    });
-
-    for (const ch of publicChannels) {
-      await prisma.channelMember.upsert({
-        where: { userId_channelId: { userId, channelId: ch.id } },
-        update: {},
-        create: { userId, channelId: ch.id, role: "member" },
-      });
-    }
-  }
-}

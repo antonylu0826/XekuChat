@@ -30,6 +30,12 @@
     reverse_proxy host.docker.internal:5173
   }
 
+  # ── MinIO file storage ─────────────────────────────────────
+  handle /files/* {
+    uri replace /files/ /xekuchat-files/
+    reverse_proxy minio:9000
+  }
+
   # ── Backend routes ─────────────────────────────────────────
   handle /api/* {
     reverse_proxy host.docker.internal:3000
@@ -39,6 +45,17 @@
   }
   handle /health* {
     reverse_proxy host.docker.internal:3000
+  }
+
+  # ── Keycloak (proxied so external browsers can reach it) ───
+  handle /realms/* {
+    reverse_proxy keycloak:8080
+  }
+  handle /resources/* {
+    reverse_proxy keycloak:8080
+  }
+  handle /js/* {
+    reverse_proxy keycloak:8080
   }
 
   # ── Everything else → Vite ─────────────────────────────────

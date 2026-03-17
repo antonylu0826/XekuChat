@@ -33,6 +33,9 @@ interface OIDCDiscovery {
 }
 
 let discoveryCache: OIDCDiscovery | null = null;
+// In dev, bust the cache on every restart (bun --watch handles this automatically).
+// Set OIDC_DISCOVERY_CACHE=false to disable caching (useful when testing env changes).
+const CACHE_ENABLED = process.env.OIDC_DISCOVERY_CACHE !== "false";
 
 function getConfig(): OIDCConfig {
   return {
@@ -43,8 +46,30 @@ function getConfig(): OIDCConfig {
   };
 }
 
+/**
+ * In dev/tunnel scenarios, OIDC_PUBLIC_ISSUER is the publicly reachable base URL
+ * (e.g. the zrok URL).  The server still talks to Keycloak internally via OIDC_ISSUER,
+ * but the browser-facing auth redirect URL gets its host rewritten to OIDC_PUBLIC_ISSUER.
+ */
+function rewriteToPublic(url: string): string {
+  const publicIssuer = process.env.OIDC_PUBLIC_ISSUER;
+  if (!publicIssuer) return url;
+  const internalIssuer = process.env.OIDC_ISSUER || "http://localhost:8080/realms/xekuchat";
+  if (publicIssuer === internalIssuer) return url;
+  try {
+    const pub = new URL(publicIssuer);
+    const target = new URL(url);
+    target.protocol = pub.protocol;
+    target.hostname = pub.hostname;
+    target.port = pub.port;
+    return target.toString();
+  } catch {
+    return url;
+  }
+}
+
 async function discover(): Promise<OIDCDiscovery> {
-  if (discoveryCache) return discoveryCache;
+  if (CACHE_ENABLED && discoveryCache) return discoveryCache;
 
   const config = getConfig();
   const res = await fetch(`${config.issuer}/.well-known/openid-configuration`);
@@ -66,7 +91,10 @@ export async function getOIDCAuthUrl(): Promise<string> {
     state: crypto.randomUUID(),
   });
 
-  return `${discovery.authorization_endpoint}?${params}`;
+  // Rewrite host to the public-facing URL (zrok / tunnel) when configured,
+  // while token_endpoint / userinfo_endpoint keep using the internal URL.
+  const authEndpoint = rewriteToPublic(discovery.authorization_endpoint);
+  return `${authEndpoint}?${params}`;
 }
 
 export async function exchangeCode(code: string): Promise<TokenResponse> {

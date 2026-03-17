@@ -66,6 +66,10 @@ services:
       KC_DB_PASSWORD: ${POSTGRES_PASSWORD:-xekuchat_dev}
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      # Allow Caddy (and zrok) to proxy Keycloak: trust X-Forwarded-* headers
+      KC_PROXY_HEADERS: xforwarded
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_ENABLED: "true"
     ports:
       - "8080:8080"
     depends_on:
@@ -87,23 +91,27 @@ services:
     # Allow container to reach services running on the host
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    depends_on:
+      - keycloak
 
   # ---- zrok tunnel ─────────────────────────────────────────────
   # Creates a public HTTPS URL → caddy-dev → API + Vite.
   # Requires: ZROK_ENABLE_TOKEN in .env (free account at https://zrok.io)
   # Enable with: docker compose --profile zrok up -d
   zrok:
-    image: openziti/zrok
+    build:
+      context: ./docker/zrok
     restart: unless-stopped
     profiles: [zrok]
+    stdin_open: true
+    tty: true
+    user: root
     environment:
+      HOME: /zrok
+      ZROK_API_ENDPOINT: ${ZROK_API_ENDPOINT:-https://api.zrok.io}
       ZROK_ENABLE_TOKEN: ${ZROK_ENABLE_TOKEN:-}
-      ZROK_TARGET: http://caddy-dev
-      HOME: /home/zrok
     volumes:
-      - zrok_data:/home/zrok/.zrok
-      - ./docker/zrok/entrypoint.sh:/entrypoint.sh:ro
-    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+      - zrok_data:/zrok/.zrok
     depends_on:
       - caddy-dev
 
