@@ -15,6 +15,8 @@ Enterprise internal messaging system, feature-parity with LINE, designed to supp
 - **i18n** — Traditional Chinese / English (Vietnamese placeholder)
 - **RWD** — Desktop / tablet / mobile, resizable sidebar
 - **PWA** — Installable to desktop or mobile home screen; app shell cached for no-white-screen cold start
+- **AI chat assistant** — OpenAI / Anthropic dual-provider, DM auto-trigger, group @mention, streaming responses, admin management
+- **Integration API** — LINE Messaging API style REST endpoints (push / broadcast / reply), API key auth with rate limiting, webhook delivery with HMAC signing and retry
 - **Audit log** — All admin actions are recorded
 
 ## Tech Stack
@@ -77,9 +79,11 @@ xekuchat/
 │   │   ├── prisma/    # Schema & migrations
 │   │   └── src/
 │   │       ├── auth/  # OIDC, JWT, middleware
-│   │       ├── routes/# REST API
+│   │       ├── routes/# REST API + Integration v1 API
 │   │       ├── ws/    # WebSocket handler & Pub/Sub
-│   │       └── lib/   # Prisma, Redis, MinIO
+│   │       ├── ai/    # AI assistant trigger, LLM client, context builder
+│   │       ├── integration/ # API key, auth middleware, webhook delivery
+│   │       └── lib/   # Prisma, Redis, MinIO, crypto
 │   ├── client/        # React 19 frontend
 │   │   └── src/
 │   │       ├── components/
@@ -134,7 +138,9 @@ See [.env.example](./.env.example).
 | Phase 4 | Admin panel, advanced permission management | ✅ Done |
 | Phase 5 | PWA — installable to home screen, offline app shell | ✅ Done |
 | Phase 6 | AI chat assistant — OpenAI/Anthropic streaming, DM, admin panel | ✅ Done |
-| Phase 7 | Integration API, operational hardening | 📋 Planned |
+| Phase 7 | AI Skills + MCP integration + monitoring | 📋 Planned |
+| Phase 8 | Integration API — REST endpoints, webhook delivery, admin UI | ✅ Done |
+| Phase 9 | Operational hardening — WebRTC, backup, monitoring | 📋 Planned |
 
 ## License
 
