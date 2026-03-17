@@ -108,7 +108,40 @@ console.log(`XekuChat server starting on port ${port}`);
 
 export default {
   port,
-  fetch: app.fetch,
+  async fetch(req: Request, server: import("bun").Server) {
+    // Handle WebSocket upgrade before Hono to avoid "Context not finalized" error
+    const url = new URL(req.url);
+    if (url.pathname === "/ws") {
+      const token = url.searchParams.get("token");
+      if (!token) {
+        return new Response(JSON.stringify({ error: "Missing token" }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      try {
+        const payload = await verifyAccessToken(token);
+        const upgraded = server.upgrade(req, {
+          data: {
+            userId: payload.sub,
+            channels: new Set<string>(),
+            lastPing: Date.now(),
+          } satisfies WSData,
+        });
+        if (upgraded) return undefined as never;
+        return new Response(JSON.stringify({ error: "WebSocket upgrade failed" }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        });
+      } catch {
+        return new Response(JSON.stringify({ error: "Invalid token" }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+    }
+    return app.fetch(req, server);
+  },
   websocket: {
     async open(ws: import("bun").ServerWebSocket<WSData>) {
       await handleWSOpen(ws);
@@ -121,30 +154,3 @@ export default {
     },
   },
 };
-
-// ---- WebSocket Upgrade Route ----
-app.get("/ws", async (c) => {
-  const token = c.req.query("token");
-  if (!token) {
-    return c.json({ error: "Missing token" }, 401);
-  }
-
-  try {
-    const payload = await verifyAccessToken(token);
-
-    const success = c.env?.upgrade?.(c.req.raw, {
-      data: {
-        userId: payload.sub,
-        channels: new Set<string>(),
-        lastPing: Date.now(),
-      } satisfies WSData,
-    });
-
-    if (success) {
-      return undefined as never;
-    }
-    return c.json({ error: "WebSocket upgrade failed" }, 500);
-  } catch {
-    return c.json({ error: "Invalid token" }, 401);
-  }
-});

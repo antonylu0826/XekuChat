@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { UserProfile } from "@xekuchat/core";
 
 interface AuthState {
@@ -13,6 +13,7 @@ export function useAuth() {
     token: null,
     loading: true,
   });
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Check for token in URL (after OIDC callback redirect)
   useEffect(() => {
@@ -31,6 +32,15 @@ export function useAuth() {
     }
   }, []);
 
+  function scheduleRefresh(token: string) {
+    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+    try {
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      const refreshIn = Math.max(payload.exp * 1000 - Date.now() - 60_000, 0);
+      refreshTimerRef.current = setTimeout(() => refreshToken(), refreshIn);
+    } catch {}
+  }
+
   async function fetchUser(token: string) {
     try {
       const res = await fetch("/auth/me", {
@@ -39,6 +49,7 @@ export function useAuth() {
       if (res.ok) {
         const { data } = await res.json();
         setState({ user: data, token, loading: false });
+        scheduleRefresh(token);
       } else {
         // Try refresh
         const refreshed = await refreshToken();
@@ -91,6 +102,7 @@ export function useAuth() {
   }, []);
 
   const logout = useCallback(async () => {
+    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
     await fetch("/auth/logout", { method: "POST", credentials: "include" });
     sessionStorage.removeItem("access_token");
     setState({ user: null, token: null, loading: false });
