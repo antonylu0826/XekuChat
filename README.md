@@ -11,7 +11,7 @@ Enterprise internal messaging system, feature-parity with LINE, designed to supp
 - **Read receipts** — Read count per message (watermark model to avoid data bloat)
 - **Message retraction** — Retracted messages show "This message has been recalled"
 - **Full-text search** — pgroonga with CJK tokenization support
-- **Auth** — OIDC / OAuth 2.0 (Keycloak, Google, GitHub, Azure AD, etc.)
+- **Auth** — Local email/password login + OIDC / OAuth 2.0 (Keycloak, Google, GitHub, Azure AD, etc.); OIDC can be toggled via `OIDC_ENABLED`
 - **i18n** — Traditional Chinese / English (Vietnamese placeholder)
 - **RWD** — Desktop / tablet / mobile, resizable sidebar
 - **PWA** — Installable to desktop or mobile home screen
@@ -47,8 +47,8 @@ git clone <repo-url>
 cd xekuchat
 
 # 2. Copy environment variables
-cp .env.example packages/server/.env
-# Edit packages/server/.env as needed
+cp .env.example .env
+# Edit .env as needed (set SUPER_ADMIN_EMAIL / SUPER_ADMIN_PASSWORD at minimum)
 
 # 3. Start infrastructure services
 docker compose up -d
@@ -63,9 +63,9 @@ bun run db:push
 bun run dev
 ```
 
-Open http://localhost:5173 and use the **Dev Quick Login** button at the bottom of the login page (no Keycloak setup required).
+Open http://localhost:5173 and sign in with the email/password set in `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_PASSWORD`. Additional local accounts can be created in the Admin Panel (`/admin` → Local Accounts).
 
-> **Note:** Dev Quick Login is only available when `NODE_ENV=development` and is automatically disabled in production.
+> **Note:** Set `OIDC_ENABLED=false` in `.env` to hide the SSO login button when Keycloak is not running.
 
 ## Project Structure
 
@@ -130,7 +130,7 @@ See [.env.example](./.env.example).
 | Phase 1 | Infrastructure, OIDC login, organization management | ✅ Done |
 | Phase 2 | WebSocket real-time messaging, read receipts, retraction | ✅ Done |
 | Phase 3 | File uploads, search, reactions, Markdown, URL preview | ✅ Done |
-| Phase 4 | Admin panel, advanced permission management | 📋 Planned |
+| Phase 4 | Admin panel, advanced permission management | ✅ Done |
 | Phase 5 | PWA / Tauri Desktop | 📋 Planned |
 | Phase 6 | AI chat assistant | 📋 Planned |
 | Phase 7 | Integration API, operational hardening | 📋 Planned |
