@@ -47,8 +47,8 @@ function getConfig(): OIDCConfig {
 }
 
 /**
- * In dev/tunnel scenarios, OIDC_PUBLIC_ISSUER is the publicly reachable base URL
- * (e.g. the zrok URL).  The server still talks to Keycloak internally via OIDC_ISSUER,
+ * In tunnel/proxy scenarios, OIDC_PUBLIC_ISSUER is the publicly reachable base URL.
+ * The server still talks to Keycloak internally via OIDC_ISSUER,
  * but the browser-facing auth redirect URL gets its host rewritten to OIDC_PUBLIC_ISSUER.
  */
 function rewriteToPublic(url: string): string {
@@ -91,7 +91,7 @@ export async function getOIDCAuthUrl(): Promise<string> {
     state: crypto.randomUUID(),
   });
 
-  // Rewrite host to the public-facing URL (zrok / tunnel) when configured,
+  // Rewrite host to the public-facing URL (tunnel/proxy) when configured,
   // while token_endpoint / userinfo_endpoint keep using the internal URL.
   const authEndpoint = rewriteToPublic(discovery.authorization_endpoint);
   return `${authEndpoint}?${params}`;

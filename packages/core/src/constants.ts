@@ -16,6 +16,8 @@ export const ALLOWED_FILE_TYPES = [
   "image/png",
   "image/gif",
   "image/webp",
+  "image/heic",  // iOS camera default format
+  "image/heif",
   // Video
   "video/mp4",
   "video/webm",

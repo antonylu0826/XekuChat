@@ -41,10 +41,13 @@ export function FileUpload({ token, onUploaded }: FileUploadProps) {
           const body = await res.json();
           if (body.success) {
             onUploaded(body.data);
+          } else {
+            alert(body.error || "Upload failed");
           }
         }
       } catch (err) {
         console.error("Upload failed:", err);
+        alert("上傳失敗，請檢查網路連線");
       } finally {
         setUploading(false);
         setProgress(0);
@@ -123,7 +126,14 @@ export function FileUpload({ token, onUploaded }: FileUploadProps) {
         title="Upload file"
       >
         {uploading ? (
-          <span className="text-xs">{Math.round(progress)}%</span>
+          progress > 0 ? (
+            <span className="text-xs font-medium">{Math.round(progress)}%</span>
+          ) : (
+            <svg className="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+            </svg>
+          )
         ) : (
           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />

@@ -14,7 +14,7 @@ Enterprise internal messaging system, feature-parity with LINE, designed to supp
 - **Auth** — Local email/password login + OIDC / OAuth 2.0 (Keycloak, Google, GitHub, Azure AD, etc.); OIDC can be toggled via `OIDC_ENABLED`
 - **i18n** — Traditional Chinese / English (Vietnamese placeholder)
 - **RWD** — Desktop / tablet / mobile, resizable sidebar
-- **PWA** — Installable to desktop or mobile home screen
+- **PWA** — Installable to desktop or mobile home screen; app shell cached for no-white-screen cold start
 - **Audit log** — All admin actions are recorded
 
 ## Tech Stack
@@ -105,6 +105,7 @@ bun run db:push          # Push schema to database
 bun run db:generate      # Regenerate Prisma client
 bun run test:e2e         # Run Playwright tests
 bun run typecheck        # TypeScript type check
+cd packages/client && bun run gen:icons   # Regenerate PWA icon PNGs from logo.svg
 ```
 
 ## Production Deployment
@@ -131,7 +132,7 @@ See [.env.example](./.env.example).
 | Phase 2 | WebSocket real-time messaging, read receipts, retraction | ✅ Done |
 | Phase 3 | File uploads, search, reactions, Markdown, URL preview | ✅ Done |
 | Phase 4 | Admin panel, advanced permission management | ✅ Done |
-| Phase 5 | PWA / Tauri Desktop | 📋 Planned |
+| Phase 5 | PWA — installable to home screen, offline app shell | ✅ Done |
 | Phase 6 | AI chat assistant | 📋 Planned |
 | Phase 7 | Integration API, operational hardening | 📋 Planned |
 

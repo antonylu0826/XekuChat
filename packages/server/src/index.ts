@@ -33,7 +33,7 @@ app.use("*", secureHeaders());
 app.use(
   "*",
   cors({
-    // In dev, accept any origin so zrok / other tunnels work without reconfiguring.
+    // In dev, accept any origin so reverse proxies/tunnels work without reconfiguring.
     // In production, restrict to APP_URL.
     origin: process.env.NODE_ENV === "development"
       ? (origin) => origin ?? "*"

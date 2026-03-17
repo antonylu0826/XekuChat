@@ -114,10 +114,19 @@
 - [x] Web Push 訂閱管理（Service Worker + VAPID，離線推播，靜音頻道跳過）
 - [x] Presence 大規模廣播優化（只通知同頻道成員 + 批次彙總每 5 秒）
 
-### Phase 5 — 多平台
-- [ ] Web App（PWA，可安裝至桌面/手機）
+### Phase 5 — 多平台 ✅（PWA 完成）
+- [x] **Web App / Mobile PWA**
+  - `manifest.json`：name、short_name、icons、`display: standalone`、`orientation: portrait`
+  - SVG logo + 自動產生 PNG 圖示（192、512、apple-touch-icon 180、badge 72）
+  - iOS meta tags：`apple-mobile-web-app-capable`、`apple-mobile-web-app-status-bar-style: black-translucent`
+  - Service Worker App Shell：install/activate/fetch（navigation network-first + 離線 fallback to `/`）
+  - 主畫面啟動不白屏（app shell cached）
+  - iOS Safe Area：`viewport-fit=cover` + `env(safe-area-inset-*)` 處理瀏海 / home indicator
+  - 橫向遮罩：mobile 橫向時顯示「請旋轉至直向模式」覆蓋層（iOS manifest orientation lock 無效的替代方案）
+  - 安裝提示：`useInstallPrompt` hook 捕捉 `beforeinstallprompt`，側邊欄顯示安裝按鈕
+  - HEIC/HEIF 相機照片上傳支援（iOS 相機預設格式）
+  - 上傳中動畫：小檔 spinner、大檔百分比
 - [ ] Desktop App（Tauri — 輕量約 5MB，Windows/macOS/Linux）
-- [ ] Mobile：**PWA 優先**（Safari 加入主畫面，iOS 16.4+ 支援 Web Push）
 
 > **備選：Capacitor 原生 App**
 > 若需上架 App Store / MDM 企業派送，可改用 Capacitor 封裝。
@@ -235,15 +244,18 @@ model OrgMember {
 // ============================================================
 
 model User {
-  id        String    @id @default(cuid())
-  email     String    @unique
-  name      String
-  avatar    String?
-  sub       String?   // OIDC subject (Keycloak user ID)
-  provider  String?   // keycloak | google | github
-  isBot     Boolean   @default(false)
-  status    String    @default("offline")
-  createdAt DateTime  @default(now())
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  avatar        String?
+  sub           String?   // OIDC subject (Keycloak user ID)
+  provider      String?   // keycloak | google | github | local | test
+  passwordHash  String?   // bcrypt，本地帳號使用
+  isBot         Boolean   @default(false)
+  isDisabled    Boolean   @default(false)
+  isSuperAdmin  Boolean   @default(false)
+  status        String    @default("offline")
+  createdAt     DateTime  @default(now())
 
   orgMemberships     OrgMember[]
   channelMemberships ChannelMember[]
@@ -260,6 +272,7 @@ model User {
 model Channel {
   id        String          @id @default(cuid())
   name      String
+  icon      String?         // emoji 圖示（可選）
   type      String          @default("group") // group | dm | readonly
   isPrivate Boolean         @default(false)
   orgId     String
@@ -274,6 +287,7 @@ model ChannelMember {
   userId    String
   channelId String
   role      String  @default("member") // admin | member
+  isMuted   Boolean @default(false)    // 靜音通知
   user      User    @relation(fields: [userId], references: [id])
   channel   Channel @relation(fields: [channelId], references: [id])
   @@unique([userId, channelId])
@@ -628,10 +642,10 @@ xekuchat/
 | Phase 2 | WebSocket 即時通訊核心 | Redis Pub/Sub、sticky session、斷線重連、已讀水位線、訊息撤回 |
 | Phase 3 | 訊息豐富功能 | tus 大檔上傳、連結預覽、pgroonga 中文搜尋 |
 | Phase 4 | 進階組織與權限管理 | 頻道權限、Web Push、Presence 優化 |
-| Phase 5 | 多平台 | PWA、Tauri Desktop |
+| Phase 5 | 多平台 | PWA（manifest、app shell、safe area、HEIC 上傳）、Tauri Desktop（待做）|
 | Phase 6 | AI 聊天助理 | LLM 整合、DM + @mention、Streaming |
 | Phase 7 | 維運強化 + Integration API | 類 LINE Messaging API、Webhook、Tool Use / RAG、通話、備份、監控 |
 
 ---
 
-*最後更新：2026-03-16（Phase 4 完成）*
+*最後更新：2026-03-17（Phase 5 PWA 完成）*

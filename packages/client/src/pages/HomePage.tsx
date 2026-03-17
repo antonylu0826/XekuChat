@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { UserProfile } from "@xekuchat/core";
 import { useChat } from "../hooks/useChat";
 import { usePushNotifications } from "../hooks/usePushNotifications";
+import { useInstallPrompt } from "../hooks/useInstallPrompt";
 import { MessageList } from "../components/MessageList";
 import { MessageInput } from "../components/MessageInput";
 import { TypingIndicator } from "../components/TypingIndicator";
@@ -476,6 +477,7 @@ export function HomePage({ user, onLogout }: HomePageProps) {
 
   const { permission: pushPermission, subscribed: pushSubscribed, subscribe: pushSubscribe, unsubscribe: pushUnsubscribe } =
     usePushNotifications(token);
+  const { canInstall, install } = useInstallPrompt();
 
   const togglePush = () => {
     if (pushSubscribed) pushUnsubscribe();
@@ -707,6 +709,18 @@ export function HomePage({ user, onLogout }: HomePageProps) {
       <div className="flex items-center justify-between border-b border-slate-700 p-4">
         <h1 className="text-lg font-bold">{t("app.name")}</h1>
         <div className="flex items-center gap-2">
+          {canInstall && (
+            <button
+              onClick={install}
+              title="安裝應用程式"
+              className="rounded p-1 text-slate-400 transition hover:bg-slate-700 hover:text-white"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+            </button>
+          )}
           <span
             className={`inline-block h-2 w-2 rounded-full ${
               wsStatus === "connected"
@@ -882,7 +896,7 @@ export function HomePage({ user, onLogout }: HomePageProps) {
   );
 
   return (
-    <div className="flex h-screen bg-slate-900 text-white">
+    <div className="flex h-full bg-slate-900 text-white">
 
       {/* Sidebar — desktop: always visible / mobile: drawer */}
       {/* Mobile overlay */}

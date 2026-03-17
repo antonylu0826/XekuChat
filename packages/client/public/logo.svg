@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Dark background with rounded corners -->
+  <rect width="512" height="512" rx="96" fill="#0f172a"/>
+  <!-- Blue chat bubble body -->
+  <path d="M100 90 Q100 50 140 50 L372 50 Q412 50 412 90 L412 275 Q412 315 372 315 L300 315 L256 370 L212 315 L140 315 Q100 315 100 275 Z" fill="#3b82f6"/>
+  <!-- White X drawn as two crossing lines -->
+  <line x1="168" y1="115" x2="344" y2="250" stroke="white" stroke-width="52" stroke-linecap="round"/>
+  <line x1="344" y1="115" x2="168" y2="250" stroke="white" stroke-width="52" stroke-linecap="round"/>
+</svg>

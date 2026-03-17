@@ -63,8 +63,7 @@ authRoutes.get("/callback", async (c) => {
     });
 
     // Redirect to app with access token.
-    // In tunnel/zrok dev, APP_PUBLIC_URL overrides APP_URL so the browser
-    // lands on the public URL instead of localhost.
+    // APP_PUBLIC_URL overrides APP_URL when the app is behind a tunnel/proxy.
     const appUrl = process.env.APP_PUBLIC_URL || process.env.APP_URL || "http://localhost:5173";
     return c.redirect(`${appUrl}?token=${accessToken}`);
   } catch (err) {

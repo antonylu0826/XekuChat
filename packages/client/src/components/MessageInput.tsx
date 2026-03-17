@@ -234,7 +234,7 @@ export function MessageInput({
   };
 
   return (
-    <div className="border-t border-slate-700 p-4">
+    <div className="border-t border-slate-700 p-4" style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom, 0px))" }}>
       {/* Reply indicator */}
       {replyToId && (
         <div className="mb-2 flex items-center gap-2 text-xs text-slate-400">

@@ -1,12 +1,43 @@
-// XekuChat Service Worker — Web Push handler
+// XekuChat Service Worker — App Shell + Web Push
+
+const CACHE_NAME = "xekuchat-shell-v1";
+const SHELL_ASSETS = ["/", "/manifest.json", "/icon-192.png"];
+
+// ── Lifecycle ────────────────────────────────────────────────────────────────
 
 self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_ASSETS))
+  );
   self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(clients.claim());
+  // Remove outdated caches
+  event.waitUntil(
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+      )
+      .then(() => clients.claim())
+  );
 });
+
+// ── Fetch — App Shell strategy ───────────────────────────────────────────────
+// Navigation requests: network-first, fall back to cached "/" so the app
+// opens instead of a blank page when offline.
+
+self.addEventListener("fetch", (event) => {
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match("/"))
+    );
+  }
+  // All other requests (API, WS, assets) pass through unmodified.
+});
+
+// ── Push Notifications ───────────────────────────────────────────────────────
 
 self.addEventListener("push", (event) => {
   if (!event.data) return;

@@ -8,9 +8,9 @@
     "build": "bun build src/index.ts --outdir dist --target bun",
     "start": "bun dist/index.js",
     "db:generate": "bunx prisma generate",
-    "db:push": "bunx prisma db push",
-    "db:migrate": "bunx prisma migrate dev",
-    "db:studio": "bunx prisma studio",
+    "db:push": "bun --env-file ../../.env scripts/prisma.ts db push",
+    "db:migrate": "bun --env-file ../../.env scripts/prisma.ts migrate dev",
+    "db:studio": "bun --env-file ../../.env scripts/prisma.ts studio",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
