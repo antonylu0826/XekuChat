@@ -54,7 +54,8 @@
       "settings": "Settings",
       "auditLogs": "Audit Logs",
       "integrations": "Integrations",
-      "localAccounts": "Local Accounts"
+      "localAccounts": "Local Accounts",
+      "aiAssistants": "AI Assistants"
     },
     "users": {
       "columns": { "user": "User", "role": "Role", "disabled": "Disabled", "actions": "Actions" },
@@ -104,6 +105,26 @@
       "columns": { "name": "Name", "description": "Description", "active": "Active", "created": "Created", "actions": "Actions" },
       "errors": { "load": "Failed to load integrations", "create": "Failed to create integration", "update": "Failed to update integration", "delete": "Failed to delete integration" }
     },
+    "aiAssistants": {
+      "create": "Create",
+      "name": "Name",
+      "avatar": "Avatar (emoji or URL)",
+      "provider": "Provider",
+      "baseUrl": "Base URL",
+      "apiKey": "API Key",
+      "apiKeyPlaceholder": "Leave blank to keep current",
+      "model": "Model",
+      "systemPrompt": "System Prompt",
+      "maxContext": "Max Context",
+      "active": "Active",
+      "inactive": "Inactive",
+      "enable": "Enable",
+      "disable": "Disable",
+      "channels": "Channels",
+      "assignChannels": "Assign to channels",
+      "empty": "No AI assistants yet.",
+      "errors": { "load": "Failed to load AI assistants", "create": "Failed to create AI assistant", "update": "Failed to update AI assistant", "delete": "Failed to delete AI assistant" }
+    },
     "localAccounts": {
       "title": "Local Accounts",
       "description": "Email/password accounts for direct login, independent of SSO.",
@@ -128,6 +149,8 @@
     "save": "Save",
     "cancel": "Cancel",
     "delete": "Delete",
-    "confirm": "Confirm"
+    "confirm": "Confirm",
+    "confirmDelete": "Are you sure you want to delete?",
+    "edit": "Edit"
   }
 }

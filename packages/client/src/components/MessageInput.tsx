@@ -1,6 +1,13 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { FileUpload } from "./FileUpload";
+import { MENTION_PATTERN } from "@xekuchat/core";
+
+interface ChannelAssistant {
+  id: string;
+  name: string;
+  avatar: string | null;
+}
 
 const EMOJI_CATEGORIES = [
   {
@@ -100,6 +107,8 @@ function InputEmojiPicker({ onSelect, onClose }: { onSelect: (emoji: string) => 
 
 interface MessageInputProps {
   token: string;
+  channelId?: string;
+  isDM?: boolean;
   onSend: (content: string, replyToId?: string) => void;
   onTyping: (isTyping: boolean) => void;
   onFileUploaded: (file: { url: string; name: string; mimeType: string; size: number }) => void;
@@ -108,8 +117,12 @@ interface MessageInputProps {
   disabled?: boolean;
 }
 
+const MENTION_REGEX = new RegExp(MENTION_PATTERN, "u");
+
 export function MessageInput({
   token,
+  channelId,
+  isDM,
   onSend,
   onTyping,
   onFileUploaded,
@@ -123,6 +136,49 @@ export function MessageInput({
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTypingRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // @mention autocomplete
+  const [assistants, setAssistants] = useState<ChannelAssistant[]>([]);
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionStart, setMentionStart] = useState(0);
+  const [mentionIndex, setMentionIndex] = useState(0);
+
+  // Fetch channel assistants (only for non-DM channels); abort on channel change
+  useEffect(() => {
+    if (!channelId || isDM) { setAssistants([]); return; }
+    const controller = new AbortController();
+    fetch(`/api/channels/${channelId}/assistants`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal,
+    })
+      .then((r) => r.json())
+      .then((d) => { if (d.success) setAssistants(d.data); })
+      .catch((err) => { if (err.name !== "AbortError") console.error(err); });
+    return () => controller.abort();
+  }, [channelId, isDM, token]);
+
+  const mentionMatches = mentionQuery !== null
+    ? assistants.filter((a) => a.name.toLowerCase().startsWith(mentionQuery.toLowerCase()))
+    : [];
+
+  const closeMention = useCallback(() => {
+    setMentionQuery(null);
+    setMentionIndex(0);
+  }, []);
+
+  const insertMention = (name: string) => {
+    const after = content.slice(mentionStart + 1 + (mentionQuery?.length ?? 0));
+    const next = content.slice(0, mentionStart) + "@" + name + " " + after;
+    setContent(next);
+    closeMention();
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      const pos = mentionStart + name.length + 2;
+      el.focus();
+      el.setSelectionRange(pos, pos);
+    });
+  };
 
   const insertEmoji = (emoji: string) => {
     const el = textareaRef.current;
@@ -226,7 +282,45 @@ export function MessageInput({
     if (onCancelReply) onCancelReply();
   };
 
+  const detectMention = (text: string, cursor: number) => {
+    if (assistants.length === 0) { closeMention(); return; }
+    const before = text.slice(0, cursor);
+    const atIdx = before.lastIndexOf("@");
+    if (atIdx === -1) { closeMention(); return; }
+    const afterAt = before.slice(atIdx + 1);
+    if (/\s/.test(afterAt)) { closeMention(); return; }
+    // Check the partial text is a valid mention start
+    if (afterAt.length > 0 && !MENTION_REGEX.test("@" + afterAt)) { closeMention(); return; }
+    setShowEmojiPicker(false); // Close emoji picker if mention dropdown opens
+    setMentionStart(atIdx);
+    setMentionQuery(afterAt);
+    setMentionIndex(0);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Handle mention navigation
+    if (mentionQuery !== null && mentionMatches.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setMentionIndex((i) => (i + 1) % mentionMatches.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setMentionIndex((i) => (i - 1 + mentionMatches.length) % mentionMatches.length);
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        insertMention(mentionMatches[mentionIndex].name);
+        return;
+      }
+      if (e.key === "Escape") {
+        closeMention();
+        return;
+      }
+    }
+
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
@@ -268,12 +362,33 @@ export function MessageInput({
           </svg>
         </button>
 
+        {/* @mention autocomplete dropdown */}
+        {mentionQuery !== null && mentionMatches.length > 0 && (
+          <div className="absolute bottom-full left-0 z-50 mb-1 w-max min-w-[10rem] max-w-xs overflow-hidden rounded-xl border border-slate-700 bg-slate-800 shadow-2xl">
+            {mentionMatches.map((a, i) => (
+              <button
+                key={a.id}
+                onMouseDown={(e) => { e.preventDefault(); insertMention(a.name); }}
+                className={`flex w-full items-center gap-2 px-3 py-2 text-sm transition ${i === mentionIndex ? "bg-slate-700 text-white" : "text-slate-300 hover:bg-slate-700"}`}
+              >
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-purple-900 text-base">
+                  {a.avatar && /^https?:\/\//.test(a.avatar)
+                    ? <img src={a.avatar} alt="" className="h-7 w-7 object-cover" />
+                    : <span>{a.avatar || "🤖"}</span>}
+                </div>
+                <span className="font-medium">@{a.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
         <textarea
           ref={textareaRef}
           value={content}
           onChange={(e) => {
             setContent(e.target.value);
             handleTyping();
+            detectMention(e.target.value, e.target.selectionStart ?? e.target.value.length);
             const el = e.target;
             el.style.height = "auto";
             el.style.height = `${Math.min(el.scrollHeight, 200)}px`;

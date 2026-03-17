@@ -12,12 +12,13 @@ datasource db {
 // ============================================================
 
 model Organization {
-  id       String        @id @default(cuid())
-  name     String
-  slug     String        @unique
-  members  OrgMember[]
-  channels Channel[]
-  settings OrgSettings?
+  id           String         @id @default(cuid())
+  name         String
+  slug         String         @unique
+  members      OrgMember[]
+  channels     Channel[]
+  settings     OrgSettings?
+  aiAssistants AIAssistant[]
 
   createdAt DateTime @default(now())
 }
@@ -73,16 +74,17 @@ model User {
 // ============================================================
 
 model Channel {
-  id        String          @id @default(cuid())
-  name      String
-  icon      String?         // emoji icon, e.g. "📢"
-  type      String          @default("group") // group | dm | readonly
-  isPrivate Boolean         @default(false)
-  orgId     String
-  org       Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  members   ChannelMember[]
-  messages  Message[]
-  createdAt DateTime        @default(now())
+  id                  String               @id @default(cuid())
+  name                String
+  icon                String?              // emoji icon, e.g. "📢"
+  type                String               @default("group") // group | dm | readonly
+  isPrivate           Boolean              @default(false)
+  orgId               String
+  org                 Organization         @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  members             ChannelMember[]
+  messages            Message[]
+  aiAssistantChannels AIAssistantChannel[]
+  createdAt           DateTime             @default(now())
 
   @@index([orgId])
 }
@@ -191,8 +193,10 @@ model AuditLog {
 model AIAssistant {
   id           String               @id @default(cuid())
   orgId        String
+  org          Organization         @relation(fields: [orgId], references: [id], onDelete: Cascade)
   name         String
   avatar       String?
+  provider     String               @default("openai") // openai | anthropic
   systemPrompt String
   baseUrl      String
   apiKeyEnc    String               // AES-256-GCM encrypted
@@ -212,6 +216,7 @@ model AIAssistantChannel {
   assistantId String
   channelId   String
   assistant   AIAssistant @relation(fields: [assistantId], references: [id], onDelete: Cascade)
+  channel     Channel     @relation(fields: [channelId], references: [id], onDelete: Cascade)
 
   @@unique([assistantId, channelId])
 }

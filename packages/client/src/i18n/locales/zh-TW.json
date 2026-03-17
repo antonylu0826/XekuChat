@@ -54,7 +54,8 @@
       "settings": "設定",
       "auditLogs": "稽核紀錄",
       "integrations": "整合",
-      "localAccounts": "本地帳號"
+      "localAccounts": "本地帳號",
+      "aiAssistants": "AI 助理"
     },
     "users": {
       "columns": { "user": "使用者", "role": "角色", "disabled": "停用", "actions": "操作" },
@@ -104,6 +105,26 @@
       "columns": { "name": "名稱", "description": "說明", "active": "啟用", "created": "建立時間", "actions": "操作" },
       "errors": { "load": "載入整合失敗", "create": "建立整合失敗", "update": "更新整合失敗", "delete": "刪除整合失敗" }
     },
+    "aiAssistants": {
+      "create": "建立",
+      "name": "名稱",
+      "avatar": "頭像（emoji 或 URL）",
+      "provider": "提供者",
+      "baseUrl": "Base URL",
+      "apiKey": "API Key",
+      "apiKeyPlaceholder": "留空表示保留原有金鑰",
+      "model": "模型",
+      "systemPrompt": "系統提示詞",
+      "maxContext": "最大上下文",
+      "active": "啟用中",
+      "inactive": "已停用",
+      "enable": "啟用",
+      "disable": "停用",
+      "channels": "頻道",
+      "assignChannels": "指派至頻道",
+      "empty": "尚未建立 AI 助理。",
+      "errors": { "load": "載入 AI 助理失敗", "create": "建立 AI 助理失敗", "update": "更新 AI 助理失敗", "delete": "刪除 AI 助理失敗" }
+    },
     "localAccounts": {
       "title": "本地帳號",
       "description": "Email/密碼帳號，直接登入，不依賴 SSO。",
@@ -128,6 +149,8 @@
     "save": "儲存",
     "cancel": "取消",
     "delete": "刪除",
-    "confirm": "確認"
+    "confirm": "確認",
+    "confirmDelete": "確定要刪除嗎？",
+    "edit": "編輯"
   }
 }

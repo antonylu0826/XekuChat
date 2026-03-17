@@ -10,6 +10,9 @@ export const WS_TIMEOUT = 60_000; // 60s
 export const PRESENCE_BATCH_INTERVAL = 5_000; // 5s
 export const MESSAGE_RATE_LIMIT = 10; // per second per user
 
+// Matches @mentions supporting ASCII, CJK (Chinese/Japanese), and hyphens
+export const MENTION_PATTERN = "@([\\w\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff-]+)";
+
 export const ALLOWED_FILE_TYPES = [
   // Images
   "image/jpeg",

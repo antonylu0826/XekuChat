@@ -9,7 +9,7 @@ interface AdminPageProps {
   onLogout: () => void;
 }
 
-type AdminTab = "users" | "channels" | "settings" | "audit-logs" | "integrations" | "local-users";
+type AdminTab = "users" | "channels" | "settings" | "audit-logs" | "integrations" | "local-users" | "ai-assistants";
 
 // ============================================================
 // UsersTab
@@ -170,11 +170,11 @@ function UsersTab({ orgId, token, currentUser }: { orgId: string; token: string;
               <tr key={m.id} className="border-b border-slate-700">
                 <td className="py-3 pr-4">
                   <div className="flex items-center gap-2">
-                    {m.user.avatar ? (
-                      <img src={m.user.avatar} alt="" className="h-8 w-8 rounded-full" />
+                    {m.user.avatar && /^https?:\/\//.test(m.user.avatar) ? (
+                      <img src={m.user.avatar} alt="" className="h-8 w-8 rounded-full object-cover" />
                     ) : (
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-sm font-medium">
-                        {m.user.name.charAt(0).toUpperCase()}
+                      <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium overflow-hidden ${m.user.avatar ? "bg-purple-900 text-xl" : "bg-blue-600"}`}>
+                        {m.user.avatar || m.user.name.charAt(0).toUpperCase()}
                       </div>
                     )}
                     <div>
@@ -1388,6 +1388,345 @@ function LocalUsersTab({ token, currentUser }: { token: string; currentUser: Use
 }
 
 // ============================================================
+// AIAssistantsTab
+// ============================================================
+
+interface AIAssistantRow {
+  id: string;
+  name: string;
+  avatar: string | null;
+  provider: string;
+  model: string;
+  systemPrompt: string;
+  baseUrl: string;
+  maxContext: number;
+  isActive: boolean;
+  botUserId: string;
+  createdAt: string;
+  channels: { channelId: string }[];
+}
+
+function AIAssistantsTab({ orgId, token }: { orgId: string; token: string }) {
+  const { t } = useTranslation();
+  const [assistants, setAssistants] = useState<AIAssistantRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    name: "",
+    provider: "openai",
+    baseUrl: "",
+    apiKey: "",
+    model: "",
+    systemPrompt: "",
+    maxContext: 20,
+    avatar: "",
+  });
+
+  // Channel assignment state
+  const [assigningId, setAssigningId] = useState<string | null>(null);
+  const [orgChannels, setOrgChannels] = useState<{ id: string; name: string }[]>([]);
+
+  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+
+  const fetchAssistants = async () => {
+    try {
+      const res = await fetch(`/api/admin/${orgId}/ai-assistants`, { headers });
+      const data = await res.json();
+      if (data.success) setAssistants(data.data);
+    } catch {
+      setError(t("admin.aiAssistants.errors.load"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchChannels = async () => {
+    const res = await fetch(`/api/admin/${orgId}/channels`, { headers });
+    const data = await res.json();
+    if (data.success) setOrgChannels(data.data.map((c: { id: string; name: string }) => ({ id: c.id, name: c.name })));
+  };
+
+  useEffect(() => { fetchAssistants(); fetchChannels(); }, [orgId]);
+
+  const resetForm = () => {
+    setForm({ name: "", provider: "openai", baseUrl: "", apiKey: "", model: "", systemPrompt: "", maxContext: 20, avatar: "" });
+    setEditingId(null);
+    setShowForm(false);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      if (editingId) {
+        const body: Record<string, unknown> = { ...form };
+        if (!body.apiKey) delete body.apiKey; // don't send empty API key on edit
+        await fetch(`/api/admin/${orgId}/ai-assistants/${editingId}`, {
+          method: "PATCH", headers, body: JSON.stringify(body),
+        });
+      } else {
+        await fetch(`/api/admin/${orgId}/ai-assistants`, {
+          method: "POST", headers, body: JSON.stringify(form),
+        });
+      }
+      resetForm();
+      fetchAssistants();
+    } catch {
+      setError(editingId ? t("admin.aiAssistants.errors.update") : t("admin.aiAssistants.errors.create"));
+    }
+  };
+
+  const handleEdit = (a: AIAssistantRow) => {
+    setForm({
+      name: a.name,
+      provider: a.provider,
+      baseUrl: a.baseUrl,
+      apiKey: "",
+      model: a.model,
+      systemPrompt: a.systemPrompt,
+      maxContext: a.maxContext,
+      avatar: a.avatar || "",
+    });
+    setEditingId(a.id);
+    setShowForm(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm(t("common.confirmDelete"))) return;
+    await fetch(`/api/admin/${orgId}/ai-assistants/${id}`, { method: "DELETE", headers });
+    fetchAssistants();
+  };
+
+  const handleToggleActive = async (a: AIAssistantRow) => {
+    await fetch(`/api/admin/${orgId}/ai-assistants/${a.id}`, {
+      method: "PATCH", headers, body: JSON.stringify({ isActive: !a.isActive }),
+    });
+    fetchAssistants();
+  };
+
+  const handleToggleChannel = async (assistantId: string, channelId: string, assigned: boolean) => {
+    if (assigned) {
+      await fetch(`/api/admin/${orgId}/ai-assistants/${assistantId}/channels/${channelId}`, {
+        method: "DELETE", headers,
+      });
+    } else {
+      await fetch(`/api/admin/${orgId}/ai-assistants/${assistantId}/channels`, {
+        method: "POST", headers, body: JSON.stringify({ channelId }),
+      });
+    }
+    fetchAssistants();
+  };
+
+  if (loading) return <p className="text-slate-400">{t("common.loading")}</p>;
+
+  return (
+    <div>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-xl font-bold">{t("admin.tabs.aiAssistants")}</h2>
+        <button
+          onClick={() => { resetForm(); setShowForm(!showForm); }}
+          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+        >
+          {showForm ? t("common.cancel") : t("admin.aiAssistants.create")}
+        </button>
+      </div>
+
+      {error && <p className="mb-4 text-red-400">{error}</p>}
+
+      {/* Create / Edit Form */}
+      {showForm && (
+        <form onSubmit={handleSubmit} className="mb-6 space-y-3 rounded-lg border border-slate-700 bg-slate-800 p-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs text-slate-400">{t("admin.aiAssistants.name")}</label>
+              <input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                required
+                className="w-full rounded border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-slate-400">{t("admin.aiAssistants.provider")}</label>
+              <select
+                value={form.provider}
+                onChange={(e) => setForm({ ...form, provider: e.target.value })}
+                className="w-full rounded border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white"
+              >
+                <option value="openai">OpenAI</option>
+                <option value="anthropic">Anthropic</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-slate-400">{t("admin.aiAssistants.baseUrl")}</label>
+              <input
+                value={form.baseUrl}
+                onChange={(e) => setForm({ ...form, baseUrl: e.target.value })}
+                required={!editingId}
+                placeholder="https://api.openai.com"
+                className="w-full rounded border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-slate-400">{t("admin.aiAssistants.model")}</label>
+              <input
+                value={form.model}
+                onChange={(e) => setForm({ ...form, model: e.target.value })}
+                required={!editingId}
+                placeholder="gpt-4o"
+                className="w-full rounded border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-slate-400">{t("admin.aiAssistants.apiKey")}</label>
+              <input
+                type="password"
+                value={form.apiKey}
+                onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
+                required={!editingId}
+                placeholder={editingId ? t("admin.aiAssistants.apiKeyPlaceholder") : ""}
+                className="w-full rounded border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-slate-400">{t("admin.aiAssistants.maxContext")}</label>
+              <input
+                type="number"
+                min={1}
+                max={100}
+                value={form.maxContext}
+                onChange={(e) => setForm({ ...form, maxContext: parseInt(e.target.value) || 20 })}
+                className="w-full rounded border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white"
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="mb-1 block text-xs text-slate-400">{t("admin.aiAssistants.avatar")}</label>
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-purple-900 text-xl">
+                  {form.avatar ? (
+                    /^https?:\/\//.test(form.avatar)
+                      ? <img src={form.avatar} alt="" className="h-10 w-10 rounded-full object-cover" />
+                      : <span>{form.avatar}</span>
+                  ) : <span>🤖</span>}
+                </div>
+                <input
+                  value={form.avatar}
+                  onChange={(e) => setForm({ ...form, avatar: e.target.value })}
+                  placeholder="🤖 or https://..."
+                  className="flex-1 rounded border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white"
+                />
+              </div>
+            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-slate-400">{t("admin.aiAssistants.systemPrompt")}</label>
+            <textarea
+              value={form.systemPrompt}
+              onChange={(e) => setForm({ ...form, systemPrompt: e.target.value })}
+              required={!editingId}
+              rows={3}
+              className="w-full rounded border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white"
+            />
+          </div>
+          <button type="submit" className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+            {editingId ? t("common.save") : t("admin.aiAssistants.create")}
+          </button>
+        </form>
+      )}
+
+      {/* Assistants Table */}
+      {assistants.length === 0 ? (
+        <p className="text-slate-500">{t("admin.aiAssistants.empty")}</p>
+      ) : (
+        <div className="space-y-3">
+          {assistants.map((a) => (
+            <div key={a.id} className="rounded-lg border border-slate-700 bg-slate-800 p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-purple-900 text-xl overflow-hidden">
+                    {a.avatar && /^https?:\/\//.test(a.avatar)
+                      ? <img src={a.avatar} alt="" className="h-10 w-10 object-cover" />
+                      : <span>{a.avatar || a.name.charAt(0).toUpperCase()}</span>}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-white">{a.name}</span>
+                      <span className="rounded bg-slate-700 px-1.5 py-0.5 text-[10px] text-slate-300">
+                        {a.provider} · {a.model}
+                      </span>
+                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                        a.isActive ? "bg-green-900/50 text-green-400" : "bg-red-900/50 text-red-400"
+                      }`}>
+                        {a.isActive ? t("admin.aiAssistants.active") : t("admin.aiAssistants.inactive")}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-xs text-slate-400">
+                      {t("admin.aiAssistants.channels")}: {a.channels.length} · {t("admin.aiAssistants.maxContext")}: {a.maxContext}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setAssigningId(assigningId === a.id ? null : a.id)}
+                    className="rounded px-2 py-1 text-xs text-slate-400 hover:bg-slate-700 hover:text-white"
+                  >
+                    {t("admin.aiAssistants.channels")}
+                  </button>
+                  <button
+                    onClick={() => handleToggleActive(a)}
+                    className="rounded px-2 py-1 text-xs text-slate-400 hover:bg-slate-700 hover:text-white"
+                  >
+                    {a.isActive ? t("admin.aiAssistants.disable") : t("admin.aiAssistants.enable")}
+                  </button>
+                  <button
+                    onClick={() => handleEdit(a)}
+                    className="rounded px-2 py-1 text-xs text-slate-400 hover:bg-slate-700 hover:text-white"
+                  >
+                    {t("common.edit")}
+                  </button>
+                  <button
+                    onClick={() => handleDelete(a.id)}
+                    className="rounded px-2 py-1 text-xs text-red-400 hover:bg-slate-700"
+                  >
+                    {t("common.delete")}
+                  </button>
+                </div>
+              </div>
+
+              {/* Channel assignment panel */}
+              {assigningId === a.id && (
+                <div className="mt-3 border-t border-slate-700 pt-3">
+                  <p className="mb-2 text-xs font-medium text-slate-400">{t("admin.aiAssistants.assignChannels")}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {orgChannels.map((ch) => {
+                      const assigned = a.channels.some((ac) => ac.channelId === ch.id);
+                      return (
+                        <button
+                          key={ch.id}
+                          onClick={() => handleToggleChannel(a.id, ch.id, assigned)}
+                          className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                            assigned
+                              ? "bg-blue-600 text-white hover:bg-blue-700"
+                              : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                          }`}
+                        >
+                          {ch.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
 // AdminPage
 // ============================================================
 
@@ -1429,6 +1768,7 @@ export function AdminPage({ user, token, onLogout }: AdminPageProps) {
     { id: "settings", label: t("admin.tabs.settings") },
     { id: "audit-logs", label: t("admin.tabs.auditLogs") },
     { id: "integrations", label: t("admin.tabs.integrations") },
+    { id: "ai-assistants", label: t("admin.tabs.aiAssistants") },
     { id: "local-users", label: t("admin.tabs.localAccounts") },
   ];
 
@@ -1492,6 +1832,9 @@ export function AdminPage({ user, token, onLogout }: AdminPageProps) {
         )}
         {activeTab === "integrations" && (
           <IntegrationsTab orgId={orgId} token={token} />
+        )}
+        {activeTab === "ai-assistants" && (
+          <AIAssistantsTab orgId={orgId} token={token} />
         )}
         {activeTab === "local-users" && (
           <LocalUsersTab token={token} currentUser={user} />

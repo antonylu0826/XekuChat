@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { MessagePayload } from "@xekuchat/core";
+import type { MessagePayload, AttachmentInfo } from "@xekuchat/core";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { LinkPreview } from "./LinkPreview";
 import { EmojiPicker, ReactionDisplay } from "./EmojiPicker";
@@ -84,6 +84,8 @@ export function MessageList({
         const showSender = !isMine && msg.senderId !== prevMsg?.senderId;
         const senderName = msg.sender?.name ?? msg.senderId;
         const senderAvatar = msg.sender?.avatar;
+        const isBot = msg.sender?.isBot;
+        const isStreaming = (msg as MessagePayload & { isStreaming?: boolean }).isStreaming;
 
         return (
           <div key={msg.id} className={`group mb-1 flex gap-2 ${isMine ? "justify-end" : "justify-start"}`}>
@@ -91,11 +93,11 @@ export function MessageList({
             {!isMine && (
               <div className="mt-1 w-8 shrink-0 self-start">
                 {showSender && (
-                  senderAvatar ? (
+                  senderAvatar && /^https?:\/\//.test(senderAvatar) ? (
                     <img src={senderAvatar} alt="" className="h-8 w-8 rounded-full object-cover" />
                   ) : (
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-600 text-xs font-medium">
-                      {senderName.charAt(0).toUpperCase()}
+                    <div className={`flex h-8 w-8 items-center justify-center rounded-full ${isBot ? "bg-purple-900 text-lg" : "bg-slate-600 text-xs font-medium"}`}>
+                      {senderAvatar || senderName.charAt(0).toUpperCase()}
                     </div>
                   )
                 )}
@@ -105,7 +107,14 @@ export function MessageList({
             <div className={`max-w-lg ${isMine ? "order-2" : ""}`}>
               {/* Sender name */}
               {showSender && (
-                <p className="mb-1 text-xs font-medium text-slate-400">{senderName}</p>
+                <p className="mb-1 flex items-center gap-1.5 text-xs font-medium text-slate-400">
+                  {senderName}
+                  {isBot && (
+                    <span className="rounded bg-purple-900/60 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-purple-300">
+                      AI
+                    </span>
+                  )}
+                </p>
               )}
 
               {/* Reply reference */}
@@ -176,7 +185,16 @@ export function MessageList({
                     </a>
                   );
                 })() : (
-                  <MarkdownRenderer content={msg.content} />
+                  <>
+                    {isStreaming && !msg.content ? (
+                      <span className="inline-block h-4 w-4 animate-pulse text-slate-400">▊</span>
+                    ) : (
+                      <MarkdownRenderer content={msg.content} />
+                    )}
+                    {isStreaming && msg.content && (
+                      <span className="inline animate-pulse text-slate-400">▊</span>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -184,8 +202,8 @@ export function MessageList({
               {!msg.isRetracted && msg.attachments && msg.attachments.length > 0 && msg.type === "text" && (
                 <div className="mt-1 flex flex-wrap gap-1">
                   {msg.attachments
-                    .filter((a) => a.mimeType.startsWith("image/"))
-                    .map((a) => (
+                    .filter((a: AttachmentInfo) => a.mimeType.startsWith("image/"))
+                    .map((a: AttachmentInfo) => (
                       <button
                         key={a.id}
                         onClick={() => setLightboxSrc(a.url)}

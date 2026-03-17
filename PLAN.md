@@ -126,24 +126,87 @@
   - 安裝提示：`useInstallPrompt` hook 捕捉 `beforeinstallprompt`，側邊欄顯示安裝按鈕
   - HEIC/HEIF 相機照片上傳支援（iOS 相機預設格式）
   - 上傳中動畫：小檔 spinner、大檔百分比
-- [ ] Desktop App（Tauri — 輕量約 5MB，Windows/macOS/Linux）
+- [ ] Desktop App（Tauri — 輕量約 5MB，Windows/macOS/Linux）**（備選，視需求評估）**
 
 > **備選：Capacitor 原生 App**
 > 若需上架 App Store / MDM 企業派送，可改用 Capacitor 封裝。
 > 注意：需另接 APNs（iOS，$99/年）與 FCM（Android）。
 
-### Phase 6 — AI 聊天助理
-- [ ] AIAssistant 管理後台（管理員建立 / 編輯 / 停用）
-- [ ] LLM 連線設定（base_url、api_key、model、system_prompt）
-- [ ] API Key 加密儲存（AES-256-GCM，key 從環境變數載入）
-- [ ] 指派助理至頻道（@mention 觸發）或開放給指定使用者 DM
-- [ ] DM 模式：使用者與 AI 助理 1 對 1 聊天
-- [ ] 頻道 @mention 模式：在群組中 @AI助理 觸發回覆
-- [ ] Streaming 回應（token by token 透過 WebSocket 串流）
-- [ ] 對話脈絡管理（sliding window，可設最大 context 訊息數）
-- [ ] AI 回應訊息視覺標示（顯示 AI 來源與模型名稱）
+### Phase 6 — AI 聊天助理 ✅
+- [x] AIAssistant 管理後台（管理員建立 / 編輯 / 停用）
+- [x] LLM Provider 支援：OpenAI（`/v1/chat/completions`）+ Anthropic（`/v1/messages`）
+- [x] API Key AES-256-GCM 加密儲存（`AI_ENCRYPTION_KEY` 環境變數）
+- [x] 指派助理至頻道（Admin Panel 頻道指派 UI）
+- [x] DM 模式：使用者與 AI 助理 1 對 1 聊天（Bot User 自動建立，DM 訊息自動觸發）
+- [x] Streaming 回應（token batching 50ms via WebSocket `ai:stream:start/token/end`）
+- [x] 對話脈絡管理（sliding window，可設最大 context 訊息數，群組加 `[UserName]:` 前綴）
+- [x] AI 回應訊息視覺標示（紫色 AI badge + 模型名稱、串流中閃爍游標 ▊）
+- [x] Bot User 識別：側邊欄 DM 列表顯示 AI 標籤、聊天 header 顯示 AI badge
+- [x] 公開端點 `GET /api/channels/:id/assistants`（供 @mention autocomplete 使用）
+- [x] 頻道 @mention 模式（`@AssistantName` 觸發 + autocomplete UI）
 
-### Phase 7 — 維運強化 + Integration API（後續必做）
+### Phase 7 — AI 技能（Skills）+ MCP 整合（後續必做）
+
+#### Part A — 內建技能（Tool Use）
+
+AI 助理透過 LLM Function Calling / Tool Use 呼叫外部能力，模型自主決定何時呼叫：
+
+- [ ] **`web_search`** — 接入搜尋 API（Brave Search / Tavily / SerpApi），取得即時資訊
+- [ ] **`fetch_url`** — 抓取指定網頁內容並摘要（RAG 前置）
+- [ ] **`current_datetime`** — 注入當前日期時間（防止模型時間感知錯誤）
+- [ ] **`calculator`** — 安全的數學/邏輯運算（sandbox eval）
+
+#### Part B — 自訂 Webhook 技能
+
+管理後台可讓管理員定義任意 HTTP 工具，AI 判斷需要時呼叫：
+
+- [ ] 技能管理 UI（名稱、描述、HTTP method、endpoint、headers、參數 JSON Schema）
+- [ ] AI 呼叫時後端代理發送請求，回傳結果注入對話脈絡繼續生成
+- [ ] 每個助理可勾選啟用哪些技能（內建 + 自訂）
+- [ ] 技能呼叫記錄（稽核日誌）
+
+#### Part C — Tool Use 執行框架
+
+- [ ] LLM 端啟用 tool_use（OpenAI function calling + Anthropic tool_use 雙格式）
+- [ ] 執行 loop：`LLM → tool_call → execute → inject result → continue`（最多 N 輪防無限循環）
+- [ ] 串流模式下 tool call 期間顯示「思考中…」狀態
+
+#### Part D — MCP（Model Context Protocol）Server 整合
+
+每個 AI 助理可綁定一或多個 MCP Server，動態取得外部工具：
+
+**Schema 變更**
+- [ ] `MCPServer` 模型（orgId、name、transport: `stdio` | `sse`、command/url、env vars、isActive）
+- [ ] `AIAssistantMCPServer` 關聯表（助理 ↔ MCP Server 多對多）
+
+**後端 MCP Client**
+- [ ] 啟動時（或按需）連線 MCP Server，探索並快取暴露的 tools / resources / prompts
+- [ ] `stdio` transport：後端 spawn 子行程，透過 stdin/stdout 通訊（適合本機工具如 filesystem、database）
+- [ ] `SSE/HTTP` transport：連線遠端 MCP Server（適合雲端服務、自架 API）
+- [ ] 將 MCP tools 動態注入 LLM tool list，執行 tool call 時轉發給對應 MCP Server
+
+**管理後台**
+- [ ] MCP Server 管理 UI（新增 server、設定 command/URL/env、測試連線、查看暴露的 tools 清單）
+- [ ] 助理的 MCP Server 指派 UI（勾選要啟用的 MCP Server）
+
+**MCP Resources / Prompts（選配）**
+- [ ] 讓助理存取 MCP 暴露的檔案、資料庫資源（RAG 知識來源）
+- [ ] MCP Prompt 模板作為 system prompt 補充來源
+
+#### Part E — AI 助理監控
+
+- [ ] **Token 用量追蹤**：每次 LLM 呼叫記錄 prompt tokens / completion tokens（OpenAI `usage` 欄位、Anthropic `usage` 欄位），寫入 `AIUsageLog` 資料表
+- [ ] **費用估算**：依 provider + model 設定單價，計算每次對話費用；管理後台顯示每日/每月累計費用
+- [ ] **速率監控**：每個助理的呼叫次數/時間區間，顯示高峰用量與趨勢圖
+- [ ] **延遲追蹤**：記錄首 token 延遲（TTFT）與總回應時間，找出慢速 provider/model
+- [ ] **對話記錄查閱**：管理後台可查看每個助理的歷史對話（含 system prompt、context 訊息、完整回應）
+- [ ] **思考過程（Thinking / Reasoning）顯示**：支援 Anthropic Extended Thinking（`claude-3-7-sonnet` 等）與 OpenAI Reasoning（`o1/o3`）的 reasoning tokens，前端可折疊展示
+- [ ] **錯誤追蹤**：記錄 AI 呼叫失敗（API 錯誤、timeout、超出 context 限制），管理後台顯示錯誤率與近期錯誤詳情
+- [ ] **每助理儀表板**：彙整上述指標，單頁顯示該助理的健康狀態、用量、費用、錯誤率
+
+---
+
+### Phase 8 — 維運強化 + Integration API（後續必做）
 
 **Integration API（類 LINE Messaging API）：**
 - [ ] Integration 管理後台（管理員建立 / 停用 / 重新產生 API Key）
@@ -161,7 +224,6 @@
 - [ ] API 呼叫稽核日誌
 
 **維運：**
-- [ ] AI Tool Use / Function Calling（搜尋內部文件、RAG 知識庫）
 - [ ] 語音 / 視訊通話（WebRTC + mediasoup 自架 SFU）
 - [ ] PostgreSQL 自動備份（pg_dump + 排程）
 - [ ] 監控：Prometheus + Grafana
@@ -382,8 +444,10 @@ model AuditLog {
 model AIAssistant {
   id           String               @id @default(cuid())
   orgId        String
+  org          Organization         @relation(...)
   name         String
   avatar       String?
+  provider     String               @default("openai") // openai | anthropic
   systemPrompt String
   baseUrl      String               // OpenAI-compatible endpoint
   apiKeyEnc    String               // AES-256-GCM 加密儲存
@@ -400,7 +464,8 @@ model AIAssistantChannel {
   id          String      @id @default(cuid())
   assistantId String
   channelId   String
-  assistant   AIAssistant @relation(fields: [assistantId], references: [id])
+  assistant   AIAssistant @relation(fields: [assistantId], references: [id], onDelete: Cascade)
+  channel     Channel     @relation(fields: [channelId], references: [id], onDelete: Cascade)
   @@unique([assistantId, channelId])
 }
 
@@ -643,9 +708,10 @@ xekuchat/
 | Phase 3 | 訊息豐富功能 | tus 大檔上傳、連結預覽、pgroonga 中文搜尋 |
 | Phase 4 | 進階組織與權限管理 | 頻道權限、Web Push、Presence 優化 |
 | Phase 5 | 多平台 | PWA（manifest、app shell、safe area、HEIC 上傳）、Tauri Desktop（待做）|
-| Phase 6 | AI 聊天助理 | LLM 整合、DM + @mention、Streaming |
-| Phase 7 | 維運強化 + Integration API | 類 LINE Messaging API、Webhook、Tool Use / RAG、通話、備份、監控 |
+| Phase 6 | AI 聊天助理 | OpenAI/Anthropic 雙 provider、DM streaming、Admin 管理、Bot User |
+| Phase 7 | AI 技能 + MCP 整合 + 監控 | 內建技能、Webhook 工具、Tool Use loop、MCP Server、Token/費用/延遲監控 |
+| Phase 8 | 維運強化 + Integration API | 類 LINE Messaging API、Webhook、通話、備份、監控 |
 
 ---
 
-*最後更新：2026-03-17（Phase 5 PWA 完成）*
+*最後更新：2026-03-17（Phase 6 AI 聊天助理完成；Phase 7 AI 技能 + MCP 規劃完成）*

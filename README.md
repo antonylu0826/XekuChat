@@ -133,7 +133,7 @@ See [.env.example](./.env.example).
 | Phase 3 | File uploads, search, reactions, Markdown, URL preview | ✅ Done |
 | Phase 4 | Admin panel, advanced permission management | ✅ Done |
 | Phase 5 | PWA — installable to home screen, offline app shell | ✅ Done |
-| Phase 6 | AI chat assistant | 📋 Planned |
+| Phase 6 | AI chat assistant — OpenAI/Anthropic streaming, DM, admin panel | ✅ Done |
 | Phase 7 | Integration API, operational hardening | 📋 Planned |
 
 ## License

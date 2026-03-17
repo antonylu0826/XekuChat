@@ -351,7 +351,7 @@ interface HomePageProps {
 interface ChannelMember {
   userId: string;
   isMuted: boolean;
-  user: { id: string; name: string; avatar: string | null };
+  user: { id: string; name: string; avatar: string | null; isBot?: boolean };
 }
 
 interface ChannelListItem {
@@ -836,14 +836,19 @@ export function HomePage({ user, onLogout }: HomePageProps) {
                         activeChannel === ch.id ? "bg-slate-700 text-white" : "text-slate-300 hover:bg-slate-700/50"
                       }`}
                     >
-                      {avatar ? (
+                      {avatar && /^https?:\/\//.test(avatar) ? (
                         <img src={avatar} alt="" className="h-6 w-6 shrink-0 rounded-full object-cover" />
                       ) : (
-                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-600 text-xs font-medium">
-                          {displayName.charAt(0).toUpperCase()}
+                        <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${partner?.user.isBot ? "bg-purple-900 text-base" : "bg-slate-600 text-xs font-medium"}`}>
+                          {avatar || displayName.charAt(0).toUpperCase()}
                         </div>
                       )}
-                      <span className="flex-1 truncate">{isMuted ? "🔕 " : ""}{displayName}</span>
+                      <span className="flex-1 truncate">
+                        {isMuted ? "🔕 " : ""}{displayName}
+                        {partner?.user.isBot && (
+                          <span className="ml-1 rounded bg-purple-900/60 px-1 py-0.5 text-[9px] font-semibold uppercase text-purple-300">AI</span>
+                        )}
+                      </span>
                       {unread > 0 && (
                         <span className="shrink-0 rounded-full bg-red-500 px-1.5 py-0.5 text-xs font-bold text-white">
                           {unread > 99 ? "99+" : unread}
@@ -955,16 +960,23 @@ export function HomePage({ user, onLogout }: HomePageProps) {
                 const partner = activeChannelInfo.members?.find((m) => m.userId !== user.id)?.user;
                 return (
                   <>
-                    {partner?.avatar ? (
+                    {partner?.avatar && /^https?:\/\//.test(partner.avatar) ? (
                       <img src={partner.avatar} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
                     ) : (
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-medium">
-                        {(partner?.name ?? "?").charAt(0).toUpperCase()}
+                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${partner?.isBot ? "bg-purple-900 text-xl" : "bg-blue-600 text-sm font-medium"}`}>
+                        {partner?.avatar || (partner?.name ?? "?").charAt(0).toUpperCase()}
                       </div>
                     )}
-                    <h2 className="flex-1 truncate text-base font-semibold md:text-lg">
-                      {partner?.name ?? activeChannelInfo.name}
-                    </h2>
+                    <div className="flex-1 truncate">
+                      <h2 className="flex items-center gap-1.5 text-base font-semibold md:text-lg">
+                        {partner?.name ?? activeChannelInfo.name}
+                        {partner?.isBot && (
+                          <span className="rounded bg-purple-900/60 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-purple-300">
+                            AI
+                          </span>
+                        )}
+                      </h2>
+                    </div>
                   </>
                 );
               })()}
@@ -1004,6 +1016,8 @@ export function HomePage({ user, onLogout }: HomePageProps) {
             ) : (
               <MessageInput
                 token={token || ""}
+                channelId={activeChannel || undefined}
+                isDM={activeChannelInfo?.type === "dm"}
                 onSend={sendMessage}
                 onTyping={sendTyping}
                 onFileUploaded={handleFileUploaded}

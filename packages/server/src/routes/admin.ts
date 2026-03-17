@@ -4,6 +4,7 @@ import { authMiddleware, orgAdminMiddleware } from "../auth/middleware";
 import { writeAuditLog } from "../audit/log";
 import { createHash, randomBytes } from "crypto";
 import { publishToChannel } from "../ws/pubsub";
+import { encrypt } from "../lib/crypto";
 
 export const adminRoutes = new Hono();
 
@@ -495,6 +496,260 @@ adminRoutes.delete("/:orgId/integrations/:id", async (c) => {
     actorId,
     targetId: id,
   });
+
+  return c.json({ success: true });
+});
+
+// ============================================================
+// AI Assistants
+// ============================================================
+
+// GET /:orgId/ai-assistants — list all AI assistants
+adminRoutes.get("/:orgId/ai-assistants", async (c) => {
+  const orgId = c.req.param("orgId");
+
+  const assistants = await prisma.aIAssistant.findMany({
+    where: { orgId },
+    select: {
+      id: true,
+      name: true,
+      avatar: true,
+      provider: true,
+      model: true,
+      systemPrompt: true,
+      baseUrl: true,
+      maxContext: true,
+      isActive: true,
+      botUserId: true,
+      createdAt: true,
+      channels: {
+        select: { channelId: true },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return c.json({ success: true, data: assistants });
+});
+
+// POST /:orgId/ai-assistants — create AI assistant
+adminRoutes.post("/:orgId/ai-assistants", async (c) => {
+  const actorId = c.get("userId");
+  const orgId = c.req.param("orgId");
+  const body = await c.req.json<{
+    name: string;
+    provider?: string;
+    baseUrl: string;
+    apiKey: string;
+    model: string;
+    systemPrompt: string;
+    maxContext?: number;
+    avatar?: string;
+  }>();
+
+  if (!body.name || !body.baseUrl || !body.apiKey || !body.model || !body.systemPrompt) {
+    return c.json({ error: "name, baseUrl, apiKey, model, systemPrompt are required" }, 400);
+  }
+
+  // Create bot user
+  const botEmail = `ai-${body.name.toLowerCase().replace(/[^a-z0-9]/g, "-")}-${randomBytes(4).toString("hex")}@xekuchat.bot`;
+  const botUser = await prisma.user.create({
+    data: {
+      email: botEmail,
+      name: body.name,
+      avatar: body.avatar || null,
+      provider: "bot",
+      isBot: true,
+    },
+  });
+
+  // Add bot to org
+  await prisma.orgMember.create({
+    data: { userId: botUser.id, orgId, role: "member" },
+  });
+
+  // Encrypt API key
+  const apiKeyEnc = encrypt(body.apiKey);
+
+  // Create assistant
+  const assistant = await prisma.aIAssistant.create({
+    data: {
+      orgId,
+      name: body.name,
+      avatar: body.avatar || null,
+      provider: body.provider || "openai",
+      systemPrompt: body.systemPrompt,
+      baseUrl: body.baseUrl,
+      apiKeyEnc,
+      model: body.model,
+      maxContext: body.maxContext || 20,
+      botUserId: botUser.id,
+    },
+    select: {
+      id: true,
+      name: true,
+      provider: true,
+      model: true,
+      systemPrompt: true,
+      baseUrl: true,
+      maxContext: true,
+      isActive: true,
+      botUserId: true,
+      createdAt: true,
+    },
+  });
+
+  await writeAuditLog({
+    orgId,
+    action: "ai_assistant_create",
+    actorId,
+    targetId: assistant.id,
+    meta: { name: body.name, model: body.model, provider: body.provider || "openai" },
+  });
+
+  return c.json({ success: true, data: assistant }, 201);
+});
+
+// PATCH /:orgId/ai-assistants/:id — update AI assistant
+adminRoutes.patch("/:orgId/ai-assistants/:id", async (c) => {
+  const actorId = c.get("userId");
+  const orgId = c.req.param("orgId");
+  const id = c.req.param("id");
+  const body = await c.req.json<{
+    name?: string;
+    provider?: string;
+    baseUrl?: string;
+    apiKey?: string;
+    model?: string;
+    systemPrompt?: string;
+    maxContext?: number;
+    isActive?: boolean;
+    avatar?: string;
+  }>();
+
+  const updateData: Record<string, unknown> = {};
+  if (body.name !== undefined) updateData.name = body.name;
+  if (body.provider !== undefined) updateData.provider = body.provider;
+  if (body.baseUrl !== undefined) updateData.baseUrl = body.baseUrl;
+  if (body.model !== undefined) updateData.model = body.model;
+  if (body.systemPrompt !== undefined) updateData.systemPrompt = body.systemPrompt;
+  if (body.maxContext !== undefined) updateData.maxContext = body.maxContext;
+  if (body.isActive !== undefined) updateData.isActive = body.isActive;
+  if (body.avatar !== undefined) updateData.avatar = body.avatar || null;
+  if (body.apiKey) updateData.apiKeyEnc = encrypt(body.apiKey);
+
+  const assistant = await prisma.aIAssistant.update({
+    where: { id },
+    data: updateData,
+    select: {
+      id: true,
+      name: true,
+      avatar: true,
+      provider: true,
+      model: true,
+      systemPrompt: true,
+      baseUrl: true,
+      maxContext: true,
+      isActive: true,
+      botUserId: true,
+      createdAt: true,
+    },
+  });
+
+  // Sync bot user name/avatar if changed
+  const botUpdate: Record<string, unknown> = {};
+  if (body.name !== undefined) botUpdate.name = body.name;
+  if (body.avatar !== undefined) botUpdate.avatar = body.avatar || null;
+  if (Object.keys(botUpdate).length > 0) {
+    await prisma.user.update({
+      where: { id: assistant.botUserId },
+      data: botUpdate,
+    });
+  }
+
+  await writeAuditLog({
+    orgId,
+    action: "ai_assistant_update",
+    actorId,
+    targetId: id,
+    meta: { ...body, apiKey: body.apiKey ? "***" : undefined },
+  });
+
+  return c.json({ success: true, data: assistant });
+});
+
+// DELETE /:orgId/ai-assistants/:id — delete AI assistant
+adminRoutes.delete("/:orgId/ai-assistants/:id", async (c) => {
+  const actorId = c.get("userId");
+  const orgId = c.req.param("orgId");
+  const id = c.req.param("id");
+
+  const assistant = await prisma.aIAssistant.findUnique({
+    where: { id },
+    select: { botUserId: true, name: true },
+  });
+
+  if (!assistant) return c.json({ error: "Not found" }, 404);
+
+  await prisma.aIAssistant.delete({ where: { id } });
+  await prisma.user.delete({ where: { id: assistant.botUserId } });
+
+  await writeAuditLog({
+    orgId,
+    action: "ai_assistant_delete",
+    actorId,
+    targetId: id,
+    meta: { name: assistant.name },
+  });
+
+  return c.json({ success: true });
+});
+
+// POST /:orgId/ai-assistants/:id/channels — assign assistant to channel
+adminRoutes.post("/:orgId/ai-assistants/:id/channels", async (c) => {
+  const id = c.req.param("id");
+  const { channelId } = await c.req.json<{ channelId: string }>();
+
+  await prisma.aIAssistantChannel.upsert({
+    where: { assistantId_channelId: { assistantId: id, channelId } },
+    update: {},
+    create: { assistantId: id, channelId },
+  });
+
+  // Also add bot user as channel member
+  const assistant = await prisma.aIAssistant.findUnique({
+    where: { id },
+    select: { botUserId: true },
+  });
+  if (assistant) {
+    await prisma.channelMember.upsert({
+      where: { userId_channelId: { userId: assistant.botUserId, channelId } },
+      update: {},
+      create: { userId: assistant.botUserId, channelId, role: "member" },
+    });
+  }
+
+  return c.json({ success: true }, 201);
+});
+
+// DELETE /:orgId/ai-assistants/:id/channels/:channelId — unassign
+adminRoutes.delete("/:orgId/ai-assistants/:id/channels/:channelId", async (c) => {
+  const id = c.req.param("id");
+  const channelId = c.req.param("channelId");
+
+  await prisma.aIAssistantChannel.delete({
+    where: { assistantId_channelId: { assistantId: id, channelId } },
+  }).catch(() => {});
+
+  const assistant = await prisma.aIAssistant.findUnique({
+    where: { id },
+    select: { botUserId: true },
+  });
+  if (assistant) {
+    await prisma.channelMember.delete({
+      where: { userId_channelId: { userId: assistant.botUserId, channelId } },
+    }).catch(() => {});
+  }
 
   return c.json({ success: true });
 });

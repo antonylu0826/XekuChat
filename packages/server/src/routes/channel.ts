@@ -118,7 +118,7 @@ channelRoutes.get("/org/:orgId", async (c) => {
     include: {
       _count: { select: { members: true, messages: true } },
       members: {
-        include: { user: { select: { id: true, name: true, avatar: true } } },
+        include: { user: { select: { id: true, name: true, avatar: true, isBot: true } } },
         // isMuted is a field on ChannelMember, automatically included
       },
     },
@@ -252,4 +252,31 @@ channelRoutes.delete("/:channelId/leave", async (c) => {
   }
 
   return c.json({ success: true });
+});
+
+// GET /:channelId/assistants — list AI assistants assigned to this channel (public, auth only)
+channelRoutes.get("/:channelId/assistants", async (c) => {
+  const channelId = c.req.param("channelId");
+
+  const assignments = await prisma.aIAssistantChannel.findMany({
+    where: { channelId },
+    include: {
+      assistant: {
+        select: {
+          id: true,
+          name: true,
+          avatar: true,
+          model: true,
+          isActive: true,
+          botUserId: true,
+        },
+      },
+    },
+  });
+
+  const data = assignments
+    .filter((a) => a.assistant.isActive)
+    .map((a) => a.assistant);
+
+  return c.json({ success: true, data });
 });

@@ -97,6 +97,57 @@ export function useChat(token: string | null, activeChannelId: string | null) {
           })
         );
         break;
+
+      case "ai:stream:start": {
+        if (event.channelId !== activeChannelRef.current) break;
+        // Deduplicate — same as message:new (sendToChannel + publishToChannel both fire locally)
+        if (seenMsgIds.current.has(event.messageId)) break;
+        seenMsgIds.current.add(event.messageId);
+        setTimeout(() => seenMsgIds.current.delete(event.messageId), 60_000);
+        const aiMsg: MessagePayload = {
+          id: event.messageId,
+          content: "",
+          type: "text",
+          channelId: event.channelId,
+          senderId: event.sender.id,
+          sender: { ...event.sender, isBot: true },
+          replyToId: null,
+          isRetracted: false,
+          attachments: [],
+          createdAt: new Date().toISOString(),
+        };
+        // Tag for streaming UI (extended at runtime)
+        (aiMsg as MessagePayload & { isStreaming?: boolean; streamModel?: string }).isStreaming = true;
+        (aiMsg as MessagePayload & { streamModel?: string }).streamModel = event.model;
+        setState((s) => ({ ...s, messages: [...s.messages, aiMsg] }));
+        break;
+      }
+
+      case "ai:stream:token": {
+        if (event.channelId !== activeChannelRef.current) break;
+        setState((s) => ({
+          ...s,
+          messages: s.messages.map((m) =>
+            m.id === event.messageId
+              ? { ...m, content: m.content + event.token }
+              : m
+          ),
+        }));
+        break;
+      }
+
+      case "ai:stream:end": {
+        if (event.channelId !== activeChannelRef.current) break;
+        setState((s) => ({
+          ...s,
+          messages: s.messages.map((m) =>
+            m.id === event.messageId
+              ? { ...m, content: event.content, isStreaming: false } as MessagePayload
+              : m
+          ),
+        }));
+        break;
+      }
     }
   }, []);
 

@@ -16,6 +16,7 @@ import { subscribeChannel, subscribeUser, unsubscribeUser } from "./pubsub";
 import { checkRateLimit } from "./ratelimit";
 import { setUserOnline, setUserOffline } from "./presence";
 import { sendPushNotification } from "../lib/webpush";
+import { handleAITrigger } from "../ai/trigger";
 
 // ============================================================
 // WebSocket Message Handler
@@ -139,7 +140,7 @@ async function handleSendMessage(
       }),
     },
     include: {
-      sender: { select: { id: true, name: true, avatar: true } },
+      sender: { select: { id: true, name: true, avatar: true, isBot: true } },
       attachments: true,
     },
   });
@@ -207,6 +208,10 @@ async function handleSendMessage(
       });
     }
   }
+
+  // Fire-and-forget AI trigger (must not block message delivery)
+  handleAITrigger(event.channelId, message.id, userId)
+    .catch((err) => console.error("AI trigger error:", err));
 }
 
 async function handleRetractMessage(

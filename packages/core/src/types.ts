@@ -46,7 +46,7 @@ export interface MessagePayload {
   type: MessageType;
   channelId: string;
   senderId: string;
-  sender?: { id: string; name: string; avatar: string | null };
+  sender?: { id: string; name: string; avatar: string | null; isBot?: boolean };
   replyToId: string | null;
   isRetracted: boolean;
   attachments: AttachmentInfo[];
@@ -79,6 +79,9 @@ export type WSServerEvent =
   | { type: "presence"; userId: string; status: UserStatus }
   | { type: "channel:joined"; channelId: string }
   | { type: "channel:updated"; channelId: string; name: string; icon: string | null }
+  | { type: "ai:stream:start"; messageId: string; channelId: string; assistantId: string; model: string; sender: { id: string; name: string; avatar: string | null } }
+  | { type: "ai:stream:token"; messageId: string; channelId: string; token: string }
+  | { type: "ai:stream:end"; messageId: string; channelId: string; content: string }
   | { type: "error"; code: string; message: string };
 
 // ---- Audit ----
@@ -96,7 +99,8 @@ export type AuditAction =
   | "integration_create"
   | "integration_delete"
   | "ai_assistant_create"
-  | "ai_assistant_update";
+  | "ai_assistant_update"
+  | "ai_assistant_delete";
 
 // ---- API Response ----
 export interface ApiResponse<T = unknown> {
