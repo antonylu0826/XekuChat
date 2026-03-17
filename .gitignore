@@ -12,6 +12,7 @@ packages/server/prisma/migrations/
 # Build
 packages/client/dist/
 packages/server/dist/
+*.tsbuildinfo
 
 # IDE
 .idea/
