@@ -9,7 +9,7 @@ interface AdminPageProps {
   onLogout: () => void;
 }
 
-type AdminTab = "users" | "channels" | "settings" | "audit-logs" | "integrations" | "local-users" | "ai-assistants";
+type AdminTab = "users" | "channels" | "settings" | "audit-logs" | "integrations" | "local-users" | "ai-assistants" | "ai-skills" | "mcp-servers" | "ai-monitoring";
 
 // ============================================================
 // UsersTab
@@ -1860,6 +1860,9 @@ export function AdminPage({ user, token, onLogout }: AdminPageProps) {
     { id: "audit-logs", label: t("admin.tabs.auditLogs") },
     { id: "integrations", label: t("admin.tabs.integrations") },
     { id: "ai-assistants", label: t("admin.tabs.aiAssistants") },
+    { id: "ai-skills", label: "AI 技能" },
+    { id: "mcp-servers", label: "MCP Server" },
+    { id: "ai-monitoring", label: "AI 監控" },
     { id: "local-users", label: t("admin.tabs.localAccounts") },
   ];
 
@@ -1927,10 +1930,535 @@ export function AdminPage({ user, token, onLogout }: AdminPageProps) {
         {activeTab === "ai-assistants" && (
           <AIAssistantsTab orgId={orgId} token={token} />
         )}
+        {activeTab === "ai-skills" && (
+          <AISkillsTab orgId={orgId} token={token} />
+        )}
+        {activeTab === "mcp-servers" && (
+          <MCPServersTab orgId={orgId} token={token} />
+        )}
+        {activeTab === "ai-monitoring" && (
+          <AIMonitoringTab orgId={orgId} token={token} />
+        )}
         {activeTab === "local-users" && (
           <LocalUsersTab token={token} currentUser={user} />
         )}
       </main>
+    </div>
+  );
+}
+
+// ============================================================
+// AISkillsTab — manage AI skills (built-in + webhook)
+// ============================================================
+
+const BUILTIN_OPTIONS = [
+  { value: "current_datetime", label: "📅 current_datetime — 取得當前日期時間" },
+  { value: "calculator", label: "🧮 calculator — 數學運算" },
+  { value: "fetch_url", label: "🌐 fetch_url — 抓取網頁內容" },
+  { value: "web_search", label: "🔍 web_search — 網路搜尋" },
+];
+
+interface SkillRow {
+  id: string;
+  name: string;
+  description: string;
+  type: string;
+  builtinName: string | null;
+  method: string | null;
+  endpoint: string | null;
+  headers: Record<string, string> | null;
+  paramSchema: Record<string, unknown> | null;
+  isActive: boolean;
+}
+
+function AISkillsTab({ orgId, token }: { orgId: string; token: string }) {
+  const [skills, setSkills] = useState<SkillRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    name: "", description: "", type: "builtin", builtinName: "current_datetime",
+    method: "POST", endpoint: "", headers: "", paramSchema: "",
+  });
+
+  const load = async () => {
+    const res = await fetch(`/api/admin/${orgId}/ai-skills`, { headers: { Authorization: `Bearer ${token}` } });
+    const data = await res.json();
+    if (data.success) setSkills(data.data);
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, [orgId]);
+
+  const resetForm = () => {
+    setForm({ name: "", description: "", type: "builtin", builtinName: "current_datetime", method: "POST", endpoint: "", headers: "", paramSchema: "" });
+    setEditingId(null);
+    setShowForm(false);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    let headers: Record<string, string> | undefined;
+    let paramSchema: Record<string, unknown> | undefined;
+    try { if (form.headers) headers = JSON.parse(form.headers); } catch { alert("Headers JSON 格式錯誤"); return; }
+    try { if (form.paramSchema) paramSchema = JSON.parse(form.paramSchema); } catch { alert("paramSchema JSON 格式錯誤"); return; }
+
+    const payload = {
+      name: form.name, description: form.description, type: form.type,
+      ...(form.type === "builtin" ? { builtinName: form.builtinName } : {
+        method: form.method, endpoint: form.endpoint,
+        ...(headers && { headers }), ...(paramSchema && { paramSchema }),
+      }),
+    };
+
+    const url = editingId ? `/api/admin/${orgId}/ai-skills/${editingId}` : `/api/admin/${orgId}/ai-skills`;
+    const method = editingId ? "PATCH" : "POST";
+    const res = await fetch(url, { method, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    if ((await res.json()).success) { load(); resetForm(); }
+  };
+
+  const deleteSkill = async (id: string) => {
+    if (!confirm("確定刪除此技能？")) return;
+    await fetch(`/api/admin/${orgId}/ai-skills/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+    load();
+  };
+
+  const toggleActive = async (skill: SkillRow) => {
+    await fetch(`/api/admin/${orgId}/ai-skills/${skill.id}`, {
+      method: "PATCH", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ isActive: !skill.isActive }),
+    });
+    load();
+  };
+
+  const startEdit = (s: SkillRow) => {
+    setForm({
+      name: s.name, description: s.description, type: s.type,
+      builtinName: s.builtinName ?? "current_datetime", method: s.method ?? "POST",
+      endpoint: s.endpoint ?? "", headers: s.headers ? JSON.stringify(s.headers, null, 2) : "",
+      paramSchema: s.paramSchema ? JSON.stringify(s.paramSchema, null, 2) : "",
+    });
+    setEditingId(s.id); setShowForm(true);
+  };
+
+  if (loading) return <div className="p-8 text-slate-400">載入中…</div>;
+
+  return (
+    <div className="p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-bold">AI 技能管理</h2>
+        <button onClick={() => setShowForm(true)} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium hover:bg-blue-700">新增技能</button>
+      </div>
+
+      {showForm && (
+        <form onSubmit={handleSubmit} className="rounded-xl border border-slate-700 bg-slate-800 p-6 space-y-4">
+          <h3 className="font-semibold">{editingId ? "編輯技能" : "新增技能"}</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">名稱</label>
+              <input required className="w-full rounded bg-slate-700 px-3 py-2 text-sm" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">類型</label>
+              <select className="w-full rounded bg-slate-700 px-3 py-2 text-sm" value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}>
+                <option value="builtin">內建技能</option>
+                <option value="webhook">Webhook 技能</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs text-slate-400 mb-1">描述</label>
+            <input required className="w-full rounded bg-slate-700 px-3 py-2 text-sm" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
+          </div>
+          {form.type === "builtin" ? (
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">內建技能</label>
+              <select className="w-full rounded bg-slate-700 px-3 py-2 text-sm" value={form.builtinName} onChange={(e) => setForm((f) => ({ ...f, builtinName: e.target.value }))}>
+                {BUILTIN_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">HTTP Method</label>
+                  <select className="w-full rounded bg-slate-700 px-3 py-2 text-sm" value={form.method} onChange={(e) => setForm((f) => ({ ...f, method: e.target.value }))}>
+                    <option>POST</option><option>GET</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Endpoint URL</label>
+                  <input className="w-full rounded bg-slate-700 px-3 py-2 text-sm" placeholder="https://..." value={form.endpoint} onChange={(e) => setForm((f) => ({ ...f, endpoint: e.target.value }))} />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Headers (JSON)</label>
+                <textarea rows={2} className="w-full rounded bg-slate-700 px-3 py-2 text-sm font-mono" placeholder='{"Authorization": "Bearer ..."}' value={form.headers} onChange={(e) => setForm((f) => ({ ...f, headers: e.target.value }))} />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">參數 Schema (JSON Schema properties)</label>
+                <textarea rows={3} className="w-full rounded bg-slate-700 px-3 py-2 text-sm font-mono" placeholder='{"type":"object","properties":{"query":{"type":"string"}}}' value={form.paramSchema} onChange={(e) => setForm((f) => ({ ...f, paramSchema: e.target.value }))} />
+              </div>
+            </div>
+          )}
+          <div className="flex gap-3">
+            <button type="submit" className="rounded-lg bg-blue-600 px-4 py-2 text-sm hover:bg-blue-700">{editingId ? "儲存" : "新增"}</button>
+            <button type="button" onClick={resetForm} className="rounded-lg bg-slate-700 px-4 py-2 text-sm hover:bg-slate-600">取消</button>
+          </div>
+        </form>
+      )}
+
+      <div className="space-y-3">
+        {skills.length === 0 && <p className="text-sm text-slate-500">尚無技能，點擊「新增技能」開始設定。</p>}
+        {skills.map((s) => (
+          <div key={s.id} className="flex items-center justify-between rounded-xl border border-slate-700 bg-slate-800 px-5 py-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{s.name}</span>
+                <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${s.type === "builtin" ? "bg-blue-900/50 text-blue-300" : "bg-orange-900/50 text-orange-300"}`}>
+                  {s.type === "builtin" ? s.builtinName : "webhook"}
+                </span>
+                <span className={`rounded px-1.5 py-0.5 text-[10px] ${s.isActive ? "bg-emerald-900/40 text-emerald-400" : "bg-red-900/40 text-red-400"}`}>
+                  {s.isActive ? "啟用" : "停用"}
+                </span>
+              </div>
+              <p className="text-sm text-slate-400 mt-0.5">{s.description}</p>
+              {s.type === "webhook" && s.endpoint && <p className="text-xs text-slate-500 mt-0.5">{s.method} {s.endpoint}</p>}
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => toggleActive(s)} className="rounded px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600">{s.isActive ? "停用" : "啟用"}</button>
+              <button onClick={() => startEdit(s)} className="rounded px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600">編輯</button>
+              <button onClick={() => deleteSkill(s.id)} className="rounded px-2 py-1 text-xs bg-red-900/50 text-red-400 hover:bg-red-900">刪除</button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-4 text-sm text-slate-400 space-y-1">
+        <p className="font-semibold text-slate-300">使用方式</p>
+        <p>1. 在此建立技能後，到「AI 助理」分頁的助理設定中指派技能給特定助理。</p>
+        <p>2. 使用 web_search 需設定環境變數 <code className="bg-slate-700 px-1 rounded">SEARCH_API_KEY</code> 和 <code className="bg-slate-700 px-1 rounded">SEARCH_PROVIDER</code>（brave/tavily）。</p>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// MCPServersTab — manage MCP servers
+// ============================================================
+
+interface MCPServerRow {
+  id: string;
+  name: string;
+  transport: string;
+  command: string | null;
+  url: string | null;
+  envVars: Record<string, string> | null;
+  isActive: boolean;
+}
+
+function MCPServersTab({ orgId, token }: { orgId: string; token: string }) {
+  const [servers, setServers] = useState<MCPServerRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState({ name: "", transport: "stdio", command: "", url: "", envVars: "" });
+
+  const load = async () => {
+    const res = await fetch(`/api/admin/${orgId}/mcp-servers`, { headers: { Authorization: `Bearer ${token}` } });
+    const data = await res.json();
+    if (data.success) setServers(data.data);
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, [orgId]);
+
+  const resetForm = () => { setForm({ name: "", transport: "stdio", command: "", url: "", envVars: "" }); setEditingId(null); setShowForm(false); };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    let envVars: Record<string, string> | undefined;
+    try { if (form.envVars) envVars = JSON.parse(form.envVars); } catch { alert("環境變數 JSON 格式錯誤"); return; }
+
+    const payload = {
+      name: form.name, transport: form.transport,
+      ...(form.transport === "stdio" ? { command: form.command } : { url: form.url }),
+      ...(envVars && { envVars }),
+    };
+
+    const url = editingId ? `/api/admin/${orgId}/mcp-servers/${editingId}` : `/api/admin/${orgId}/mcp-servers`;
+    const res = await fetch(url, { method: editingId ? "PATCH" : "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    if ((await res.json()).success) { load(); resetForm(); }
+  };
+
+  const deleteServer = async (id: string) => {
+    if (!confirm("確定刪除此 MCP Server？")) return;
+    await fetch(`/api/admin/${orgId}/mcp-servers/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+    load();
+  };
+
+  const toggleActive = async (s: MCPServerRow) => {
+    await fetch(`/api/admin/${orgId}/mcp-servers/${s.id}`, {
+      method: "PATCH", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ isActive: !s.isActive }),
+    });
+    load();
+  };
+
+  const startEdit = (s: MCPServerRow) => {
+    setForm({
+      name: s.name, transport: s.transport, command: s.command ?? "",
+      url: s.url ?? "", envVars: s.envVars ? JSON.stringify(s.envVars, null, 2) : "",
+    });
+    setEditingId(s.id); setShowForm(true);
+  };
+
+  if (loading) return <div className="p-8 text-slate-400">載入中…</div>;
+
+  return (
+    <div className="p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-bold">MCP Server 管理</h2>
+        <button onClick={() => setShowForm(true)} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium hover:bg-blue-700">新增 Server</button>
+      </div>
+
+      {showForm && (
+        <form onSubmit={handleSubmit} className="rounded-xl border border-slate-700 bg-slate-800 p-6 space-y-4">
+          <h3 className="font-semibold">{editingId ? "編輯 MCP Server" : "新增 MCP Server"}</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">名稱</label>
+              <input required className="w-full rounded bg-slate-700 px-3 py-2 text-sm" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Transport</label>
+              <select className="w-full rounded bg-slate-700 px-3 py-2 text-sm" value={form.transport} onChange={(e) => setForm((f) => ({ ...f, transport: e.target.value }))}>
+                <option value="stdio">stdio（本機子行程）</option>
+                <option value="sse">SSE/HTTP（遠端）</option>
+              </select>
+            </div>
+          </div>
+          {form.transport === "stdio" ? (
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Command（含參數）</label>
+              <input className="w-full rounded bg-slate-700 px-3 py-2 text-sm font-mono" placeholder="npx @modelcontextprotocol/server-filesystem /path/to/data" value={form.command} onChange={(e) => setForm((f) => ({ ...f, command: e.target.value }))} />
+            </div>
+          ) : (
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Server URL</label>
+              <input className="w-full rounded bg-slate-700 px-3 py-2 text-sm" placeholder="http://localhost:3001" value={form.url} onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))} />
+            </div>
+          )}
+          <div>
+            <label className="block text-xs text-slate-400 mb-1">環境變數 (JSON，可選)</label>
+            <textarea rows={2} className="w-full rounded bg-slate-700 px-3 py-2 text-sm font-mono" placeholder='{"API_KEY": "..."}' value={form.envVars} onChange={(e) => setForm((f) => ({ ...f, envVars: e.target.value }))} />
+          </div>
+          <div className="flex gap-3">
+            <button type="submit" className="rounded-lg bg-blue-600 px-4 py-2 text-sm hover:bg-blue-700">{editingId ? "儲存" : "新增"}</button>
+            <button type="button" onClick={resetForm} className="rounded-lg bg-slate-700 px-4 py-2 text-sm hover:bg-slate-600">取消</button>
+          </div>
+        </form>
+      )}
+
+      <div className="space-y-3">
+        {servers.length === 0 && <p className="text-sm text-slate-500">尚無 MCP Server，點擊「新增 Server」開始設定。</p>}
+        {servers.map((s) => (
+          <div key={s.id} className="flex items-center justify-between rounded-xl border border-slate-700 bg-slate-800 px-5 py-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{s.name}</span>
+                <span className="rounded bg-indigo-900/50 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-indigo-300">{s.transport}</span>
+                <span className={`rounded px-1.5 py-0.5 text-[10px] ${s.isActive ? "bg-emerald-900/40 text-emerald-400" : "bg-red-900/40 text-red-400"}`}>{s.isActive ? "啟用" : "停用"}</span>
+              </div>
+              <p className="text-xs text-slate-400 font-mono mt-0.5">{s.command ?? s.url ?? ""}</p>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => toggleActive(s)} className="rounded px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600">{s.isActive ? "停用" : "啟用"}</button>
+              <button onClick={() => startEdit(s)} className="rounded px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600">編輯</button>
+              <button onClick={() => deleteServer(s.id)} className="rounded px-2 py-1 text-xs bg-red-900/50 text-red-400 hover:bg-red-900">刪除</button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-4 text-sm text-slate-400 space-y-1">
+        <p className="font-semibold text-slate-300">說明</p>
+        <p>新增 MCP Server 後，到「AI 助理」分頁指派給特定助理使用。</p>
+        <p><strong>stdio</strong>：在伺服器上啟動子行程，適合 filesystem、database 等本機工具。</p>
+        <p><strong>SSE</strong>：連線至遠端 MCP Server HTTP 端點。</p>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// AIMonitoringTab — usage stats and logs
+// ============================================================
+
+interface MonitoringSummary {
+  assistantId: string;
+  name: string;
+  model: string;
+  provider: string;
+  totalCalls: number;
+  errorCount: number;
+  errorRate: number;
+  totalTokens: number;
+  totalCostUsd: number;
+  avgLatencyMs: number;
+  avgTtftMs: number | null;
+  totalToolCalls: number;
+}
+
+interface UsageLog {
+  id: string;
+  provider: string;
+  model: string;
+  promptTokens: number;
+  completionTokens: number;
+  costUsd: number;
+  ttftMs: number | null;
+  totalMs: number;
+  toolCallCount: number;
+  error: string | null;
+  createdAt: string;
+}
+
+function AIMonitoringTab({ orgId, token }: { orgId: string; token: string }) {
+  const [summary, setSummary] = useState<MonitoringSummary[]>([]);
+  const [logs, setLogs] = useState<UsageLog[]>([]);
+  const [selectedAssistant, setSelectedAssistant] = useState<string | null>(null);
+  const [days, setDays] = useState(30);
+  const [loading, setLoading] = useState(true);
+
+  const loadSummary = async () => {
+    setLoading(true);
+    const res = await fetch(`/api/admin/${orgId}/ai-monitoring/summary?days=${days}`, { headers: { Authorization: `Bearer ${token}` } });
+    const data = await res.json();
+    if (data.success) setSummary(data.data);
+    setLoading(false);
+  };
+
+  const loadLogs = async (assistantId: string) => {
+    const res = await fetch(`/api/admin/${orgId}/ai-monitoring/${assistantId}/logs?limit=50`, { headers: { Authorization: `Bearer ${token}` } });
+    const data = await res.json();
+    if (data.success) setLogs(data.data);
+  };
+
+  useEffect(() => { loadSummary(); }, [orgId, days]);
+
+  useEffect(() => {
+    if (selectedAssistant) loadLogs(selectedAssistant);
+    else setLogs([]);
+  }, [selectedAssistant]);
+
+  const fmtCost = (usd: number) => usd < 0.001 ? "<$0.001" : `$${usd.toFixed(4)}`;
+  const fmtMs = (ms: number) => ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`;
+
+  if (loading) return <div className="p-8 text-slate-400">載入中…</div>;
+
+  return (
+    <div className="p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-bold">AI 助理監控</h2>
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-slate-400">統計區間</label>
+          <select
+            value={days}
+            onChange={(e) => setDays(Number(e.target.value))}
+            className="rounded bg-slate-700 px-3 py-1.5 text-sm"
+          >
+            <option value={7}>最近 7 天</option>
+            <option value={30}>最近 30 天</option>
+            <option value={90}>最近 90 天</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Summary cards */}
+      {summary.length === 0 && <p className="text-sm text-slate-500">此區間內尚無對話記錄。</p>}
+      <div className="space-y-3">
+        {summary.map((s) => (
+          <div
+            key={s.assistantId}
+            className={`rounded-xl border cursor-pointer p-5 transition ${selectedAssistant === s.assistantId ? "border-blue-500 bg-slate-800" : "border-slate-700 bg-slate-800 hover:border-slate-600"}`}
+            onClick={() => setSelectedAssistant(selectedAssistant === s.assistantId ? null : s.assistantId)}
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="font-semibold">{s.name}</p>
+                <p className="text-xs text-slate-400">{s.provider} · {s.model}</p>
+              </div>
+              <div className="grid grid-cols-4 gap-6 text-center">
+                <div>
+                  <p className="text-lg font-bold">{s.totalCalls}</p>
+                  <p className="text-[10px] text-slate-400 uppercase">對話次數</p>
+                </div>
+                <div>
+                  <p className={`text-lg font-bold ${s.errorRate > 10 ? "text-red-400" : "text-emerald-400"}`}>{s.errorRate}%</p>
+                  <p className="text-[10px] text-slate-400 uppercase">錯誤率</p>
+                </div>
+                <div>
+                  <p className="text-lg font-bold">{(s.totalTokens / 1000).toFixed(1)}K</p>
+                  <p className="text-[10px] text-slate-400 uppercase">Token 用量</p>
+                </div>
+                <div>
+                  <p className="text-lg font-bold">{fmtCost(s.totalCostUsd)}</p>
+                  <p className="text-[10px] text-slate-400 uppercase">估算費用</p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 flex gap-6 text-xs text-slate-400">
+              <span>平均延遲：{fmtMs(s.avgLatencyMs)}</span>
+              {s.avgTtftMs && <span>TTFT：{fmtMs(s.avgTtftMs)}</span>}
+              <span>工具呼叫：{s.totalToolCalls} 次</span>
+              <span>錯誤：{s.errorCount} 次</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Logs table */}
+      {selectedAssistant && logs.length > 0 && (
+        <div>
+          <h3 className="font-semibold mb-3">最近 50 筆對話記錄</h3>
+          <div className="overflow-x-auto rounded-xl border border-slate-700">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-800 text-xs text-slate-400">
+                <tr>
+                  <th className="px-4 py-3 text-left">時間</th>
+                  <th className="px-4 py-3 text-right">Prompt Token</th>
+                  <th className="px-4 py-3 text-right">Completion</th>
+                  <th className="px-4 py-3 text-right">費用</th>
+                  <th className="px-4 py-3 text-right">TTFT</th>
+                  <th className="px-4 py-3 text-right">延遲</th>
+                  <th className="px-4 py-3 text-right">工具</th>
+                  <th className="px-4 py-3 text-left">狀態</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-700 bg-slate-900">
+                {logs.map((l) => (
+                  <tr key={l.id} className="hover:bg-slate-800/50">
+                    <td className="px-4 py-2 text-slate-400 whitespace-nowrap">{new Date(l.createdAt).toLocaleString("zh-TW")}</td>
+                    <td className="px-4 py-2 text-right">{l.promptTokens.toLocaleString()}</td>
+                    <td className="px-4 py-2 text-right">{l.completionTokens.toLocaleString()}</td>
+                    <td className="px-4 py-2 text-right text-emerald-400">{fmtCost(l.costUsd)}</td>
+                    <td className="px-4 py-2 text-right text-slate-400">{l.ttftMs ? fmtMs(l.ttftMs) : "—"}</td>
+                    <td className="px-4 py-2 text-right">{fmtMs(l.totalMs)}</td>
+                    <td className="px-4 py-2 text-right">{l.toolCallCount}</td>
+                    <td className="px-4 py-2">
+                      {l.error
+                        ? <span className="rounded bg-red-900/40 px-1.5 py-0.5 text-[10px] text-red-400" title={l.error}>錯誤</span>
+                        : <span className="rounded bg-emerald-900/40 px-1.5 py-0.5 text-[10px] text-emerald-400">成功</span>
+                      }
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

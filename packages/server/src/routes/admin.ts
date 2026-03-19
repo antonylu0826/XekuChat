@@ -940,3 +940,255 @@ adminRoutes.get("/:orgId/integrations-api/:id/webhook-deliveries", async (c) => 
 
   return c.json({ success: true, data: deliveries });
 });
+
+// ============================================================
+// AI Skills (Part B)
+// ============================================================
+
+adminRoutes.get("/:orgId/ai-skills", async (c) => {
+  const orgId = c.req.param("orgId");
+  const skills = await prisma.aISkill.findMany({ where: { orgId }, orderBy: { createdAt: "asc" } });
+  return c.json({ success: true, data: skills });
+});
+
+adminRoutes.post("/:orgId/ai-skills", async (c) => {
+  const orgId = c.req.param("orgId");
+  const body = await c.req.json() as {
+    name: string; description: string; type: string;
+    builtinName?: string; method?: string; endpoint?: string;
+    headers?: Record<string, string>; paramSchema?: Record<string, unknown>;
+  };
+  const skill = await prisma.aISkill.create({
+    data: {
+      orgId, name: body.name, description: body.description, type: body.type,
+      builtinName: body.builtinName ?? null, method: body.method ?? null,
+      endpoint: body.endpoint ?? null, headers: body.headers ?? null,
+      paramSchema: body.paramSchema ?? null,
+    },
+  });
+  return c.json({ success: true, data: skill });
+});
+
+adminRoutes.patch("/:orgId/ai-skills/:id", async (c) => {
+  const id = c.req.param("id");
+  const body = await c.req.json() as Partial<{
+    name: string; description: string; method: string; endpoint: string;
+    headers: Record<string, string>; paramSchema: Record<string, unknown>; isActive: boolean;
+  }>;
+  const skill = await prisma.aISkill.update({
+    where: { id },
+    data: {
+      ...(body.name !== undefined && { name: body.name }),
+      ...(body.description !== undefined && { description: body.description }),
+      ...(body.method !== undefined && { method: body.method }),
+      ...(body.endpoint !== undefined && { endpoint: body.endpoint }),
+      ...(body.headers !== undefined && { headers: body.headers }),
+      ...(body.paramSchema !== undefined && { paramSchema: body.paramSchema }),
+      ...(body.isActive !== undefined && { isActive: body.isActive }),
+    },
+  });
+  return c.json({ success: true, data: skill });
+});
+
+adminRoutes.delete("/:orgId/ai-skills/:id", async (c) => {
+  await prisma.aISkill.delete({ where: { id: c.req.param("id") } }).catch(() => {});
+  return c.json({ success: true });
+});
+
+adminRoutes.get("/:orgId/ai-assistants/:id/assigned-skills", async (c) => {
+  const assistantId = c.req.param("id");
+  const rows = await prisma.aIAssistantSkill.findMany({
+    where: { assistantId }, include: { skill: true },
+  });
+  return c.json({ success: true, data: rows.map((r) => r.skill) });
+});
+
+adminRoutes.post("/:orgId/ai-assistants/:id/skills", async (c) => {
+  const assistantId = c.req.param("id");
+  const { skillId } = await c.req.json() as { skillId: string };
+  await prisma.aIAssistantSkill.upsert({
+    where: { assistantId_skillId: { assistantId, skillId } },
+    update: {}, create: { assistantId, skillId },
+  });
+  return c.json({ success: true });
+});
+
+adminRoutes.delete("/:orgId/ai-assistants/:id/skills/:skillId", async (c) => {
+  const assistantId = c.req.param("id");
+  const skillId = c.req.param("skillId");
+  await prisma.aIAssistantSkill.delete({
+    where: { assistantId_skillId: { assistantId, skillId } },
+  }).catch(() => {});
+  return c.json({ success: true });
+});
+
+// ============================================================
+// MCP Servers (Part D)
+// ============================================================
+
+adminRoutes.get("/:orgId/mcp-servers", async (c) => {
+  const orgId = c.req.param("orgId");
+  const servers = await prisma.mCPServer.findMany({ where: { orgId }, orderBy: { createdAt: "asc" } });
+  return c.json({ success: true, data: servers });
+});
+
+adminRoutes.post("/:orgId/mcp-servers", async (c) => {
+  const orgId = c.req.param("orgId");
+  const body = await c.req.json() as {
+    name: string; transport: string; command?: string; url?: string;
+    envVars?: Record<string, string>;
+  };
+  const server = await prisma.mCPServer.create({
+    data: {
+      orgId, name: body.name, transport: body.transport,
+      command: body.command ?? null, url: body.url ?? null,
+      envVars: body.envVars ?? null,
+    },
+  });
+  return c.json({ success: true, data: server });
+});
+
+adminRoutes.patch("/:orgId/mcp-servers/:id", async (c) => {
+  const id = c.req.param("id");
+  const body = await c.req.json() as Partial<{
+    name: string; command: string; url: string;
+    envVars: Record<string, string>; isActive: boolean;
+  }>;
+  const server = await prisma.mCPServer.update({
+    where: { id },
+    data: {
+      ...(body.name !== undefined && { name: body.name }),
+      ...(body.command !== undefined && { command: body.command }),
+      ...(body.url !== undefined && { url: body.url }),
+      ...(body.envVars !== undefined && { envVars: body.envVars }),
+      ...(body.isActive !== undefined && { isActive: body.isActive }),
+    },
+  });
+  return c.json({ success: true, data: server });
+});
+
+adminRoutes.delete("/:orgId/mcp-servers/:id", async (c) => {
+  await prisma.mCPServer.delete({ where: { id: c.req.param("id") } }).catch(() => {});
+  return c.json({ success: true });
+});
+
+adminRoutes.get("/:orgId/ai-assistants/:id/assigned-mcp-servers", async (c) => {
+  const assistantId = c.req.param("id");
+  const rows = await prisma.aIAssistantMCPServer.findMany({
+    where: { assistantId }, include: { mcpServer: true },
+  });
+  return c.json({ success: true, data: rows.map((r) => r.mcpServer) });
+});
+
+adminRoutes.post("/:orgId/ai-assistants/:id/mcp-servers", async (c) => {
+  const assistantId = c.req.param("id");
+  const { mcpServerId } = await c.req.json() as { mcpServerId: string };
+  await prisma.aIAssistantMCPServer.upsert({
+    where: { assistantId_mcpServerId: { assistantId, mcpServerId } },
+    update: {}, create: { assistantId, mcpServerId },
+  });
+  return c.json({ success: true });
+});
+
+adminRoutes.delete("/:orgId/ai-assistants/:id/mcp-servers/:mcpServerId", async (c) => {
+  const assistantId = c.req.param("id");
+  const mcpServerId = c.req.param("mcpServerId");
+  await prisma.aIAssistantMCPServer.delete({
+    where: { assistantId_mcpServerId: { assistantId, mcpServerId } },
+  }).catch(() => {});
+  return c.json({ success: true });
+});
+
+// ============================================================
+// AI Monitoring (Part E)
+// ============================================================
+
+adminRoutes.get("/:orgId/ai-monitoring/summary", async (c) => {
+  const orgId = c.req.param("orgId");
+  const days = parseInt(c.req.query("days") || "30");
+  const since = new Date(Date.now() - days * 24 * 3600 * 1000);
+
+  const assistants = await prisma.aIAssistant.findMany({
+    where: { orgId },
+    select: {
+      id: true, name: true, model: true, provider: true,
+      usageLogs: {
+        where: { createdAt: { gte: since } },
+        select: {
+          promptTokens: true, completionTokens: true, costUsd: true,
+          ttftMs: true, totalMs: true, toolCallCount: true, error: true,
+        },
+      },
+    },
+  });
+
+  const summary = assistants.map((a) => {
+    const logs = a.usageLogs;
+    const totalCalls = logs.length;
+    const errorCount = logs.filter((l) => l.error).length;
+    const totalPromptTokens = logs.reduce((s, l) => s + l.promptTokens, 0);
+    const totalCompletionTokens = logs.reduce((s, l) => s + l.completionTokens, 0);
+    const totalCost = logs.reduce((s, l) => s + l.costUsd, 0);
+    const avgLatency = totalCalls > 0 ? Math.round(logs.reduce((s, l) => s + l.totalMs, 0) / totalCalls) : 0;
+    const ttftLogs = logs.filter((l) => l.ttftMs);
+    const avgTtft = ttftLogs.length > 0 ? Math.round(ttftLogs.reduce((s, l) => s + (l.ttftMs ?? 0), 0) / ttftLogs.length) : null;
+    return {
+      assistantId: a.id, name: a.name, model: a.model, provider: a.provider,
+      totalCalls, errorCount, errorRate: totalCalls > 0 ? Math.round((errorCount / totalCalls) * 100) : 0,
+      totalPromptTokens, totalCompletionTokens,
+      totalTokens: totalPromptTokens + totalCompletionTokens,
+      totalCostUsd: Math.round(totalCost * 1000000) / 1000000,
+      avgLatencyMs: avgLatency, avgTtftMs: avgTtft,
+      totalToolCalls: logs.reduce((s, l) => s + l.toolCallCount, 0),
+    };
+  });
+
+  return c.json({ success: true, data: summary });
+});
+
+adminRoutes.get("/:orgId/ai-monitoring/:assistantId/logs", async (c) => {
+  const assistantId = c.req.param("assistantId");
+  const limit = Math.min(parseInt(c.req.query("limit") || "100"), 500);
+  const logs = await prisma.aIUsageLog.findMany({
+    where: { assistantId },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+    select: {
+      id: true, channelId: true, provider: true, model: true,
+      promptTokens: true, completionTokens: true, costUsd: true,
+      ttftMs: true, totalMs: true, toolCallCount: true, error: true, createdAt: true,
+    },
+  });
+  return c.json({ success: true, data: logs });
+});
+
+adminRoutes.get("/:orgId/ai-monitoring/:assistantId/daily", async (c) => {
+  const assistantId = c.req.param("assistantId");
+  const days = parseInt(c.req.query("days") || "30");
+  const since = new Date(Date.now() - days * 24 * 3600 * 1000);
+  const logs = await prisma.aIUsageLog.findMany({
+    where: { assistantId, createdAt: { gte: since } },
+    select: { promptTokens: true, completionTokens: true, costUsd: true, totalMs: true, error: true, createdAt: true },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const byDay = new Map<string, { calls: number; errors: number; tokens: number; cost: number; latency: number }>();
+  for (const log of logs) {
+    const day = log.createdAt.toISOString().slice(0, 10);
+    const e = byDay.get(day) ?? { calls: 0, errors: 0, tokens: 0, cost: 0, latency: 0 };
+    e.calls++;
+    if (log.error) e.errors++;
+    e.tokens += log.promptTokens + log.completionTokens;
+    e.cost += log.costUsd;
+    e.latency += log.totalMs;
+    byDay.set(day, e);
+  }
+
+  const daily = Array.from(byDay.entries()).map(([date, s]) => ({
+    date, calls: s.calls, errors: s.errors, tokens: s.tokens,
+    costUsd: Math.round(s.cost * 1000000) / 1000000,
+    avgLatencyMs: s.calls > 0 ? Math.round(s.latency / s.calls) : 0,
+  }));
+
+  return c.json({ success: true, data: daily });
+});

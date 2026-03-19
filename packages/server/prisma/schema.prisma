@@ -19,6 +19,8 @@ model Organization {
   channels     Channel[]
   settings     OrgSettings?
   aiAssistants  AIAssistant[]
+  aiSkills      AISkill[]
+  mcpServers    MCPServer[]
   integrations  Integration[]
 
   createdAt DateTime @default(now())
@@ -194,22 +196,25 @@ model AuditLog {
 // ============================================================
 
 model AIAssistant {
-  id           String               @id @default(cuid())
+  id           String                 @id @default(cuid())
   orgId        String
-  org          Organization         @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  org          Organization           @relation(fields: [orgId], references: [id], onDelete: Cascade)
   name         String
   avatar       String?
-  provider     String               @default("openai") // openai | anthropic
+  provider     String                 @default("openai") // openai | anthropic
   systemPrompt String
   baseUrl      String
-  apiKeyEnc    String               // AES-256-GCM encrypted
+  apiKeyEnc    String                 // AES-256-GCM encrypted
   model        String
-  maxContext   Int                   @default(20)
-  isActive     Boolean              @default(true)
-  botUserId    String               @unique
-  botUser      User                 @relation(fields: [botUserId], references: [id])
+  maxContext   Int                    @default(20)
+  isActive     Boolean                @default(true)
+  botUserId    String                 @unique
+  botUser      User                   @relation(fields: [botUserId], references: [id])
   channels     AIAssistantChannel[]
-  createdAt    DateTime             @default(now())
+  skills       AIAssistantSkill[]
+  mcpServers   AIAssistantMCPServer[]
+  usageLogs    AIUsageLog[]
+  createdAt    DateTime               @default(now())
 
   @@index([orgId])
 }
@@ -222,6 +227,86 @@ model AIAssistantChannel {
   channel     Channel     @relation(fields: [channelId], references: [id], onDelete: Cascade)
 
   @@unique([assistantId, channelId])
+}
+
+// ---- AI Skills (Part A + B) ----
+
+model AISkill {
+  id          String             @id @default(cuid())
+  orgId       String
+  org         Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  name        String             // unique display name
+  description String
+  type        String             // "builtin" | "webhook"
+  builtinName String?            // builtin type: "web_search" | "fetch_url" | "current_datetime" | "calculator"
+  method      String?            // webhook type: "GET" | "POST"
+  endpoint    String?            // webhook type: URL
+  headers     Json?              // webhook type: {"Authorization": "..."}
+  paramSchema Json?              // JSON Schema object for parameters
+  isActive    Boolean            @default(true)
+  assistants  AIAssistantSkill[]
+  createdAt   DateTime           @default(now())
+
+  @@index([orgId])
+}
+
+model AIAssistantSkill {
+  assistantId String
+  skillId     String
+  assistant   AIAssistant @relation(fields: [assistantId], references: [id], onDelete: Cascade)
+  skill       AISkill     @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([assistantId, skillId])
+}
+
+// ---- MCP Servers (Part D) ----
+
+model MCPServer {
+  id          String                 @id @default(cuid())
+  orgId       String
+  org         Organization           @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  name        String
+  transport   String                 // "stdio" | "sse"
+  command     String?                // stdio: e.g. "npx @modelcontextprotocol/server-filesystem /path"
+  url         String?                // sse: e.g. "http://localhost:3001"
+  envVars     Json?                  // {"KEY": "value"}
+  isActive    Boolean                @default(true)
+  assistants  AIAssistantMCPServer[]
+  createdAt   DateTime               @default(now())
+
+  @@index([orgId])
+}
+
+model AIAssistantMCPServer {
+  assistantId  String
+  mcpServerId  String
+  assistant    AIAssistant @relation(fields: [assistantId], references: [id], onDelete: Cascade)
+  mcpServer    MCPServer   @relation(fields: [mcpServerId], references: [id], onDelete: Cascade)
+
+  @@id([assistantId, mcpServerId])
+}
+
+// ---- AI Usage Log (Part E) ----
+
+model AIUsageLog {
+  id               String      @id @default(cuid())
+  assistantId      String
+  assistant        AIAssistant @relation(fields: [assistantId], references: [id], onDelete: Cascade)
+  channelId        String
+  messageId        String?
+  provider         String
+  model            String
+  promptTokens     Int         @default(0)
+  completionTokens Int         @default(0)
+  costUsd          Float       @default(0)
+  ttftMs           Int?        // time-to-first-token ms
+  totalMs          Int         @default(0)
+  toolCallCount    Int         @default(0)
+  error            String?
+  createdAt        DateTime    @default(now())
+
+  @@index([assistantId])
+  @@index([createdAt])
 }
 
 // ============================================================
