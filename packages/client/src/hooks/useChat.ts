@@ -9,7 +9,11 @@ interface ChatState {
   reactions: Map<string, Array<{ emoji: string; count: number }>>;
 }
 
-export function useChat(token: string | null, activeChannelId: string | null) {
+export function useChat(
+  token: string | null,
+  activeChannelId: string | null,
+  onCallEvent?: (event: WSServerEvent) => void
+) {
   const [state, setState] = useState<ChatState>({
     messages: [],
     typingUsers: new Map(),
@@ -22,6 +26,8 @@ export function useChat(token: string | null, activeChannelId: string | null) {
 
   // sendRef breaks the circular dep between handleMessage and send
   const sendRef = useRef<(event: WSClientEvent) => void>(() => {});
+  const onCallEventRef = useRef(onCallEvent);
+  onCallEventRef.current = onCallEvent;
   // Deduplicate message:new events (can arrive twice: direct + Redis subscriber)
   const seenMsgIds = useRef<Set<string>>(new Set());
 
@@ -148,6 +154,16 @@ export function useChat(token: string | null, activeChannelId: string | null) {
         }));
         break;
       }
+
+      case "call:incoming":
+      case "call:accepted":
+      case "call:rejected":
+      case "call:ended":
+      case "call:offer":
+      case "call:answer":
+      case "call:ice":
+        onCallEventRef.current?.(event);
+        break;
     }
   }, []);
 
@@ -267,6 +283,7 @@ export function useChat(token: string | null, activeChannelId: string | null) {
   return {
     ...state,
     wsStatus: status,
+    send,
     sendMessage,
     retractMessage,
     sendTyping,

@@ -11,7 +11,7 @@ import {
   isUserOnlineLocally,
   type WSData,
 } from "./connections";
-import { publishToChannel } from "./pubsub";
+import { publishToChannel, publishToUser } from "./pubsub";
 import { subscribeChannel, subscribeUser, unsubscribeUser } from "./pubsub";
 import { checkRateLimit } from "./ratelimit";
 import { setUserOnline, setUserOffline } from "./presence";
@@ -19,6 +19,21 @@ import { sendPushNotification } from "../lib/webpush";
 import { handleAITrigger } from "../ai/trigger";
 import { enqueueWebhookEvent } from "../integration/webhook";
 import { MENTION_PATTERN } from "@xekuchat/core";
+
+// ============================================================
+// Active Call Sessions (in-memory, single-node)
+// ============================================================
+
+interface CallSession {
+  callId: string;
+  channelId: string;
+  callerId: string;
+  targetUserId: string;
+  callType: "audio" | "video";
+  status: "ringing" | "active" | "ended";
+}
+
+const activeCalls = new Map<string, CallSession>();
 
 // ============================================================
 // WebSocket Message Handler
@@ -84,6 +99,27 @@ export async function handleWSMessage(ws: ServerWebSocket<WSData>, raw: string |
       break;
     case "channel:join":
       await handleChannelJoin(ws, event);
+      break;
+    case "call:initiate":
+      await handleCallInitiate(ws, event);
+      break;
+    case "call:accept":
+      await handleCallAccept(ws, event);
+      break;
+    case "call:reject":
+      await handleCallReject(ws, event);
+      break;
+    case "call:end":
+      await handleCallEnd(ws, event);
+      break;
+    case "call:offer":
+      await handleCallOffer(ws, event);
+      break;
+    case "call:answer":
+      await handleCallAnswer(ws, event);
+      break;
+    case "call:ice":
+      await handleCallIce(ws, event);
       break;
     default:
       ws.send(JSON.stringify({ type: "error", code: "UNKNOWN_EVENT", message: "Unknown event type" }));
@@ -382,4 +418,196 @@ async function handleChannelJoin(
 
   subscribeToChannel(ws, event.channelId);
   subscribeChannel(event.channelId);
+}
+
+// ============================================================
+// Call Signaling Handlers
+// ============================================================
+
+async function handleCallInitiate(
+  ws: ServerWebSocket<WSData>,
+  event: Extract<WSClientEvent, { type: "call:initiate" }>
+) {
+  const callerId = ws.data.userId;
+
+  // Verify caller is a member of the channel
+  if (!ws.data.channels.has(event.channelId)) {
+    ws.send(JSON.stringify({ type: "error", code: "NOT_MEMBER", message: "Not a member of this channel" }));
+    return;
+  }
+
+  // Reject if callId already exists
+  if (activeCalls.has(event.callId)) {
+    ws.send(JSON.stringify({ type: "error", code: "CALL_EXISTS", message: "Call already exists" }));
+    return;
+  }
+
+  // Get caller info
+  const caller = await prisma.user.findUnique({
+    where: { id: callerId },
+    select: { name: true, avatar: true },
+  });
+
+  if (!caller) return;
+
+  const session: CallSession = {
+    callId: event.callId,
+    channelId: event.channelId,
+    callerId,
+    targetUserId: event.targetUserId,
+    callType: event.callType,
+    status: "ringing",
+  };
+  activeCalls.set(event.callId, session);
+
+  // Notify target user
+  const incoming: WSServerEvent = {
+    type: "call:incoming",
+    callId: event.callId,
+    channelId: event.channelId,
+    callerId,
+    callerName: caller.name,
+    callerAvatar: caller.avatar,
+    callType: event.callType,
+  };
+
+  const payload = JSON.stringify(incoming);
+  sendToUser(event.targetUserId, payload);
+  await publishToUser(event.targetUserId, payload);
+
+  // Auto-cleanup after 60s if not answered
+  setTimeout(() => {
+    const s = activeCalls.get(event.callId);
+    if (s && s.status === "ringing") {
+      activeCalls.delete(event.callId);
+      const ended: WSServerEvent = { type: "call:ended", callId: event.callId, byUserId: "timeout" };
+      const endedStr = JSON.stringify(ended);
+      sendToUser(callerId, endedStr);
+      publishToUser(callerId, endedStr).catch(() => {});
+    }
+  }, 60_000);
+}
+
+async function handleCallAccept(
+  ws: ServerWebSocket<WSData>,
+  event: Extract<WSClientEvent, { type: "call:accept" }>
+) {
+  const session = activeCalls.get(event.callId);
+  if (!session || session.targetUserId !== ws.data.userId) return;
+
+  session.status = "active";
+
+  const accepted: WSServerEvent = {
+    type: "call:accepted",
+    callId: event.callId,
+    acceptorId: ws.data.userId,
+  };
+
+  const payload = JSON.stringify(accepted);
+  sendToUser(session.callerId, payload);
+  await publishToUser(session.callerId, payload);
+}
+
+async function handleCallReject(
+  ws: ServerWebSocket<WSData>,
+  event: Extract<WSClientEvent, { type: "call:reject" }>
+) {
+  const session = activeCalls.get(event.callId);
+  if (!session || session.targetUserId !== ws.data.userId) return;
+
+  activeCalls.delete(event.callId);
+
+  const rejected: WSServerEvent = {
+    type: "call:rejected",
+    callId: event.callId,
+    rejectorId: ws.data.userId,
+  };
+
+  const payload = JSON.stringify(rejected);
+  sendToUser(session.callerId, payload);
+  await publishToUser(session.callerId, payload);
+}
+
+async function handleCallEnd(
+  ws: ServerWebSocket<WSData>,
+  event: Extract<WSClientEvent, { type: "call:end" }>
+) {
+  const session = activeCalls.get(event.callId);
+  if (!session) return;
+
+  const userId = ws.data.userId;
+  if (session.callerId !== userId && session.targetUserId !== userId) return;
+
+  activeCalls.delete(event.callId);
+
+  const ended: WSServerEvent = {
+    type: "call:ended",
+    callId: event.callId,
+    byUserId: userId,
+  };
+
+  const payload = JSON.stringify(ended);
+  const otherId = session.callerId === userId ? session.targetUserId : session.callerId;
+
+  // Notify both parties
+  sendToUser(userId, payload);
+  sendToUser(otherId, payload);
+  await Promise.all([
+    publishToUser(userId, payload),
+    publishToUser(otherId, payload),
+  ]);
+}
+
+async function handleCallOffer(
+  ws: ServerWebSocket<WSData>,
+  event: Extract<WSClientEvent, { type: "call:offer" }>
+) {
+  const session = activeCalls.get(event.callId);
+  if (!session) return;
+
+  const offer: WSServerEvent = {
+    type: "call:offer",
+    callId: event.callId,
+    fromUserId: ws.data.userId,
+    sdp: event.sdp,
+  };
+
+  const payload = JSON.stringify(offer);
+  sendToUser(event.targetUserId, payload);
+  await publishToUser(event.targetUserId, payload);
+}
+
+async function handleCallAnswer(
+  ws: ServerWebSocket<WSData>,
+  event: Extract<WSClientEvent, { type: "call:answer" }>
+) {
+  const session = activeCalls.get(event.callId);
+  if (!session) return;
+
+  const answer: WSServerEvent = {
+    type: "call:answer",
+    callId: event.callId,
+    fromUserId: ws.data.userId,
+    sdp: event.sdp,
+  };
+
+  const payload = JSON.stringify(answer);
+  sendToUser(event.targetUserId, payload);
+  await publishToUser(event.targetUserId, payload);
+}
+
+async function handleCallIce(
+  ws: ServerWebSocket<WSData>,
+  event: Extract<WSClientEvent, { type: "call:ice" }>
+) {
+  const ice: WSServerEvent = {
+    type: "call:ice",
+    callId: event.callId,
+    fromUserId: ws.data.userId,
+    candidate: event.candidate,
+  };
+
+  const payload = JSON.stringify(ice);
+  sendToUser(event.targetUserId, payload);
+  await publishToUser(event.targetUserId, payload);
 }

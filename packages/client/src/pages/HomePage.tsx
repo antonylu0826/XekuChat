@@ -9,6 +9,9 @@ import { MessageInput } from "../components/MessageInput";
 import { TypingIndicator } from "../components/TypingIndicator";
 import { SearchBar } from "../components/SearchBar";
 import { SetupWizard } from "../components/SetupWizard";
+import { CallModal } from "../components/CallModal";
+import { CallScreen } from "../components/CallScreen";
+import { useWebRTC } from "../hooks/useWebRTC";
 
 function ChannelMenu({ orgId, channelId, token }: { orgId: string; channelId: string; token: string }) {
   const [open, setOpen] = useState(false);
@@ -504,18 +507,40 @@ export function HomePage({ user, onLogout }: HomePageProps) {
     );
   }, [token, user.id]);
 
+  // Bridge ref so useChat can forward call events to useWebRTC (avoids circular init order)
+  const callHandlerRef = useRef<Parameters<typeof useChat>[2]>(undefined);
+
   const {
     messages,
     typingUsers,
     readCounts,
     reactions,
     wsStatus,
+    send: wsSend,
     sendMessage,
     retractMessage,
     sendTyping,
     markAsRead,
     sendReaction,
-  } = useChat(token, activeChannel);
+  } = useChat(token, activeChannel, (event) => callHandlerRef.current?.(event));
+
+  const {
+    callState,
+    localStream,
+    remoteStream,
+    isMuted: callMuted,
+    isCameraOff,
+    initiateCall,
+    acceptCall,
+    rejectCall,
+    endCall,
+    toggleMute: toggleCallMute,
+    toggleCamera,
+    handleCallEvent,
+  } = useWebRTC(user.id, wsSend);
+
+  // Keep bridge ref up-to-date
+  callHandlerRef.current = handleCallEvent;
 
   const toggleLang = () => {
     i18n.changeLanguage(i18n.language === "zh-TW" ? "en" : "zh-TW");
@@ -977,6 +1002,29 @@ export function HomePage({ user, onLogout }: HomePageProps) {
                         )}
                       </h2>
                     </div>
+                    {/* Call buttons — DM only, not bots */}
+                    {partner && !partner.isBot && callState.phase === "idle" && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => initiateCall(activeChannel!, partner.id, "audio")}
+                          className="rounded p-1.5 text-slate-400 transition hover:bg-slate-700 hover:text-white"
+                          title="語音通話"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
+                            <path fillRule="evenodd" d="M1.5 4.5a3 3 0 013-3h1.372c.86 0 1.61.586 1.819 1.42l1.105 4.423a1.875 1.875 0 01-.694 1.955l-1.293.97c-.135.101-.164.249-.126.352a11.285 11.285 0 006.697 6.697c.103.038.25.009.352-.126l.97-1.293a1.875 1.875 0 011.955-.694l4.423 1.105c.834.209 1.42.959 1.42 1.82V19.5a3 3 0 01-3 3h-2.25C8.552 22.5 1.5 15.448 1.5 6.75V4.5z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => initiateCall(activeChannel!, partner.id, "video")}
+                          className="rounded p-1.5 text-slate-400 transition hover:bg-slate-700 hover:text-white"
+                          title="視訊通話"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
+                            <path d="M4.5 4.5a3 3 0 00-3 3v9a3 3 0 003 3h8.25a3 3 0 003-3v-9a3 3 0 00-3-3H4.5zM19.94 18.75l-2.69-2.69V7.94l2.69-2.69c.944-.945 2.56-.276 2.56 1.06v11.38c0 1.336-1.616 2.005-2.56 1.06z" />
+                          </svg>
+                        </button>
+                      </div>
+                    )}
                   </>
                 );
               })()}
@@ -1062,6 +1110,24 @@ export function HomePage({ user, onLogout }: HomePageProps) {
           onClose={() => setShowNewDM(false)}
         />
       )}
+
+      {/* Call UI */}
+      <CallModal
+        callState={callState}
+        onAccept={acceptCall}
+        onReject={rejectCall}
+        onEnd={endCall}
+      />
+      <CallScreen
+        callState={callState}
+        localStream={localStream}
+        remoteStream={remoteStream}
+        isMuted={callMuted}
+        isCameraOff={isCameraOff}
+        onEnd={endCall}
+        onToggleMute={toggleCallMute}
+        onToggleCamera={toggleCamera}
+      />
     </div>
   );
 }

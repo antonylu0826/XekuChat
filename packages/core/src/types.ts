@@ -68,7 +68,14 @@ export type WSClientEvent =
   | { type: "typing:start"; channelId: string }
   | { type: "typing:stop"; channelId: string }
   | { type: "read:update"; channelId: string; messageId: string }
-  | { type: "channel:join"; channelId: string };
+  | { type: "channel:join"; channelId: string }
+  | { type: "call:initiate"; callId: string; channelId: string; targetUserId: string; callType: "audio" | "video" }
+  | { type: "call:accept"; callId: string }
+  | { type: "call:reject"; callId: string }
+  | { type: "call:end"; callId: string }
+  | { type: "call:offer"; callId: string; targetUserId: string; sdp: string }
+  | { type: "call:answer"; callId: string; targetUserId: string; sdp: string }
+  | { type: "call:ice"; callId: string; targetUserId: string; candidate: RTCIceCandidateInit };
 
 export type WSServerEvent =
   | { type: "message:new"; message: MessagePayload }
@@ -82,6 +89,13 @@ export type WSServerEvent =
   | { type: "ai:stream:start"; messageId: string; channelId: string; assistantId: string; model: string; sender: { id: string; name: string; avatar: string | null } }
   | { type: "ai:stream:token"; messageId: string; channelId: string; token: string }
   | { type: "ai:stream:end"; messageId: string; channelId: string; content: string }
+  | { type: "call:incoming"; callId: string; channelId: string; callerId: string; callerName: string; callerAvatar: string | null; callType: "audio" | "video" }
+  | { type: "call:accepted"; callId: string; acceptorId: string }
+  | { type: "call:rejected"; callId: string; rejectorId: string }
+  | { type: "call:ended"; callId: string; byUserId: string }
+  | { type: "call:offer"; callId: string; fromUserId: string; sdp: string }
+  | { type: "call:answer"; callId: string; fromUserId: string; sdp: string }
+  | { type: "call:ice"; callId: string; fromUserId: string; candidate: RTCIceCandidateInit }
   | { type: "error"; code: string; message: string };
 
 // ---- Audit ----
