@@ -119,7 +119,7 @@ class StdioMCPClient {
   private request(method: string, params?: unknown): Promise<unknown> {
     return new Promise((resolve, reject) => {
       const id = this.nextId++;
-      const req: JsonRpcRequest = { jsonrpc: "2.0", id, method, ...(params && { params }) };
+      const req: JsonRpcRequest = { jsonrpc: "2.0", id, method, ...(params !== undefined ? { params } : {}) };
       this.pendingRequests.set(id, { resolve, reject });
 
       const line = JSON.stringify(req) + "\n";
@@ -174,7 +174,7 @@ class SSEMCPClient {
       jsonrpc: "2.0",
       id: Date.now(),
       method,
-      ...(params && { params }),
+      ...(params !== undefined ? { params } : {}),
     };
 
     const res = await fetch(`${this.url.replace(/\/+$/, "")}/messages`, {

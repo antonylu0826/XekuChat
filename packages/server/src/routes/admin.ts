@@ -962,8 +962,9 @@ adminRoutes.post("/:orgId/ai-skills", async (c) => {
     data: {
       orgId, name: body.name, description: body.description, type: body.type,
       builtinName: body.builtinName ?? null, method: body.method ?? null,
-      endpoint: body.endpoint ?? null, headers: body.headers ?? null,
-      paramSchema: body.paramSchema ?? null,
+      endpoint: body.endpoint ?? null,
+      headers: body.headers ? JSON.parse(JSON.stringify(body.headers)) : undefined,
+      paramSchema: body.paramSchema ? JSON.parse(JSON.stringify(body.paramSchema)) : undefined,
     },
   });
   return c.json({ success: true, data: skill });
@@ -982,8 +983,8 @@ adminRoutes.patch("/:orgId/ai-skills/:id", async (c) => {
       ...(body.description !== undefined && { description: body.description }),
       ...(body.method !== undefined && { method: body.method }),
       ...(body.endpoint !== undefined && { endpoint: body.endpoint }),
-      ...(body.headers !== undefined && { headers: body.headers }),
-      ...(body.paramSchema !== undefined && { paramSchema: body.paramSchema }),
+      ...(body.headers !== undefined && { headers: body.headers as object }),
+      ...(body.paramSchema !== undefined && { paramSchema: body.paramSchema as object }),
       ...(body.isActive !== undefined && { isActive: body.isActive }),
     },
   });
@@ -1042,7 +1043,7 @@ adminRoutes.post("/:orgId/mcp-servers", async (c) => {
     data: {
       orgId, name: body.name, transport: body.transport,
       command: body.command ?? null, url: body.url ?? null,
-      envVars: body.envVars ?? null,
+      envVars: body.envVars || undefined,
     },
   });
   return c.json({ success: true, data: server });
